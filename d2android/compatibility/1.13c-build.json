@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "target": "Diablo II: Lord of Destruction 1.13c",
+  "sourceBranch": "main",
+  "files": {
+    "Game.exe": {
+      "size": 61440,
+      "gitBlobSha1": "af67fe2ac0ea6fbc8cef60a2afa96f9f3abd1ad0",
+      "sha256": "7baeda5e815fbe7a807d6a102aada579cd7a1b89383dd4a9b5d92f887ef165bf",
+      "peMachine": "0x014c",
+      "peTimestampUtc": "2010-03-09T04:10:51Z",
+      "fileVersion": "1, 0, 13, 60",
+      "productVersion": "1, 0, 13, 257"
+    },
+    "D2Common.dll": {
+      "size": 679936,
+      "gitBlobSha1": "763bd7ee34ebf04f9fd3ea7e86f6a3e22bf1dc03",
+      "sha256": "b5c1e13c0c0e27b2a9c2f391ce8b7035549fdec505f8d779cb1e9ead1c7bf6e7",
+      "peMachine": "0x014c",
+      "peTimestampUtc": "2010-03-09T03:44:57Z"
+    },
+    "D2Client.dll": {
+      "size": 1093632,
+      "gitBlobSha1": "6f467b93842b170bcbde2c00308c8c07a5212a1e",
+      "sha256": null,
+      "verification": "binary exceeds connected text-fetch limit; SHA-256 and PE metadata still need local binary inspection"
+    }
+  },
+  "nativeCompatibility": {
+    "status": "not-enabled",
+    "reason": "D2Client.dll fingerprint is incomplete and no 1.13c native command handler has been implemented or validated.",
+    "failClosed": true
+  },
+  "note": "Game binaries are owner-supplied references and are intentionally not copied into this feature branch or included in APK artifacts."
+}
