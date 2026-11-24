@@ -53,6 +53,7 @@ public class D2ModUdpAdapterTest {
         assertEquals(800, state.width);
         assertEquals(600, state.height);
         assertTrue(state.inGame);
+        assertFalse(state.inTown);
         assertEquals(300, state.playerX);
         assertEquals(250, state.playerY);
         assertEquals(1, state.hoverType);
