@@ -2,7 +2,6 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
-#include <tlhelp32.h>
 
 static int fail(const char* message, DWORD code) {
     char text[512];
@@ -40,25 +39,11 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR commandLine,int s
     }
     HMODULE kernel=GetModuleHandleA("kernel32.dll");
     FARPROC load=kernel?GetProcAddress(kernel,"LoadLibraryA"):NULL;
-    HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pi.dwProcessId);
-    MODULEENTRY32 entry; ZeroMemory(&entry,sizeof(entry)); entry.dwSize=sizeof(entry);
-    BYTE* remoteKernel=NULL;
-    if (snapshot!=INVALID_HANDLE_VALUE && Module32First(snapshot,&entry)) {
-        do {
-            if (_stricmp(entry.szModule,"kernel32.dll")==0) {
-                remoteKernel=(BYTE*)entry.modBaseAddr;
-                break;
-            }
-        } while (Module32Next(snapshot,&entry));
-    }
-    if (snapshot!=INVALID_HANDLE_VALUE) CloseHandle(snapshot);
-    if (!load || !remoteKernel) {
+    if (!load) {
         VirtualFreeEx(pi.hProcess,remote,0,MEM_RELEASE);
-        TerminateProcess(pi.hProcess,1); return fail("Could not resolve target LoadLibraryA",GetLastError());
+        TerminateProcess(pi.hProcess,1); return fail("LoadLibraryA is unavailable",GetLastError());
     }
-    DWORD loadOffset=(DWORD)((BYTE*)load-(BYTE*)kernel);
-    LPTHREAD_START_ROUTINE remoteLoad=(LPTHREAD_START_ROUTINE)(remoteKernel+loadOffset);
-    HANDLE inject=CreateRemoteThread(pi.hProcess,NULL,0,remoteLoad,remote,0,NULL);
+    HANDLE inject=CreateRemoteThread(pi.hProcess,NULL,0,(LPTHREAD_START_ROUTINE)load,remote,0,NULL);
     if (!inject) {
         DWORD error=GetLastError(); VirtualFreeEx(pi.hProcess,remote,0,MEM_RELEASE);
         TerminateProcess(pi.hProcess,1); return fail("Could not inject the 1.13c touch module",error);
