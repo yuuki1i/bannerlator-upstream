@@ -191,9 +191,9 @@ done:
 static int version_113c(const char* path) {
     DWORD ignored = 0;
     DWORD size = GetFileVersionInfoSizeA(path, &ignored);
-    if (!size) return 0;
+    if (!size) return -1;
     BYTE* data = (BYTE*)HeapAlloc(GetProcessHeap(), 0, size);
-    if (!data) return 0;
+    if (!data) return -1;
     VS_FIXEDFILEINFO* info = NULL;
     UINT len = 0;
     int ok = GetFileVersionInfoA(path, 0, size, data)
@@ -228,7 +228,7 @@ static int verify_installation(void) {
     ULARGE_INTEGER file_size;
     file_size.HighPart = attr.nFileSizeHigh;
     file_size.LowPart = attr.nFileSizeLow;
-    if (file_size.QuadPart != 1093632ULL || !version_113c(client)) return 0;
+    if (file_size.QuadPart != 1093632ULL || version_113c(client) == 0) return 0;
 
     g_client = GetModuleHandleA("D2Client.dll");
     g_common = GetModuleHandleA("D2Common.dll");
