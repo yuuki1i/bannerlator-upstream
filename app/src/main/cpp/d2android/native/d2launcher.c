@@ -41,15 +41,15 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR commandLine,int s
     HMODULE kernel=GetModuleHandleA("kernel32.dll");
     FARPROC load=kernel?GetProcAddress(kernel,"LoadLibraryA"):NULL;
     HANDLE snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pi.dwProcessId);
-    MODULEENTRY32A entry; ZeroMemory(&entry,sizeof(entry)); entry.dwSize=sizeof(entry);
+    MODULEENTRY32 entry; ZeroMemory(&entry,sizeof(entry)); entry.dwSize=sizeof(entry);
     BYTE* remoteKernel=NULL;
-    if (snapshot!=INVALID_HANDLE_VALUE && Module32FirstA(snapshot,&entry)) {
+    if (snapshot!=INVALID_HANDLE_VALUE && Module32First(snapshot,&entry)) {
         do {
             if (_stricmp(entry.szModule,"kernel32.dll")==0) {
                 remoteKernel=(BYTE*)entry.modBaseAddr;
                 break;
             }
-        } while (Module32NextA(snapshot,&entry));
+        } while (Module32Next(snapshot,&entry));
     }
     if (snapshot!=INVALID_HANDLE_VALUE) CloseHandle(snapshot);
     if (!load || !remoteKernel) {
