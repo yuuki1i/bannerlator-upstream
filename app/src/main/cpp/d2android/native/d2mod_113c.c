@@ -497,9 +497,9 @@ static int d2_sort_read(void* player, SortItem* out, int charmsFixed) {
             it->x = (BYTE)d2_rd32(path, SORT_IPATH_X);
             it->y = (BYTE)d2_rd32(path, SORT_IPATH_Y);
             it->w = (BYTE)w; it->h = (BYTE)h;
-            it->group = (BYTE)(w * h == 1 ? SG_SMALL : SG_BIG);
-            it->fixed = (BYTE)(charmsFixed && code[0]=='c' && code[1]=='m'
-                    && code[2]>='1' && code[2]<='3');
+            int isCharm = code[0]=='c' && code[1]=='m' && code[2]>='1' && code[2]<='3';
+            it->group = (BYTE)(isCharm ? SG_CHARMS : (w * h == 1 ? SG_SMALL : SG_BIG));
+            it->fixed = (BYTE)(charmsFixed && isCharm);
             it->tx = it->x; it->ty = it->y;
         }
         item = d2_rdp(data, SORT_IDATA_NEXTINV);
