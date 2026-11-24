@@ -22,6 +22,7 @@ public final class D2CommandPacket {
     public static final int CMD_SORT = 24;
     public static final int CMD_KEY_PRESS = 36; // D2Android extension: synthesize one guest key tap.
     public static final int CMD_GROUND_SKILL = 37; // D2Android extension: directional ground cast.
+    public static final int CMD_TAP = 38; // D2Android extension: direct touch-to-click.
 
     public static final int BUTTON_LEFT = 0;
     public static final int BUTTON_RIGHT = 1;
@@ -74,6 +75,13 @@ public final class D2CommandPacket {
     public static byte[] keyPress(int virtualKey) {
         if (virtualKey < 1 || virtualKey > 0xFF) throw new IllegalArgumentException("Invalid virtual key");
         return command(CMD_KEY_PRESS, 1).put((byte) virtualKey).array();
+    }
+
+    public static byte[] tap(int button, int phase, int x, int y) {
+        if (button < 0 || button > 1 || phase < 0 || phase > 3)
+            throw new IllegalArgumentException("Invalid tap action");
+        return command(CMD_TAP, 6).put((byte)button).put((byte)phase)
+                .putShort((short)x).putShort((short)y).array();
     }
 
     public static byte[] groundSkill(int button, int phase, int dx, int dy) {
