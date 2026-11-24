@@ -10,7 +10,7 @@ import static org.junit.Assert.*;
 public class D2ModUdpAdapterTest {
     private static byte[] statePacket() {
         ByteBuffer b = ByteBuffer.allocate(160).order(ByteOrder.LITTLE_ENDIAN);
-        b.put((byte)'D').put((byte)'2').put((byte)'A').put((byte)'M').put((byte)2).put((byte)2).putShort((short)1);
+        b.put((byte)'D').put((byte)'2').put((byte)'A').put((byte)'M').put((byte)3).put((byte)2).putShort((short)1);
         b.putShort((short)800).putShort((short)600);
         b.putShort((short)0).putShort((short)0);
         b.putInt(0).putInt(0);
@@ -24,9 +24,9 @@ public class D2ModUdpAdapterTest {
         b.putInt(0x10203040).putShort((short)340).putShort((short)260);
         b.put((byte)75).put((byte)2).put((byte)4).put(new byte[]{'O','r','c','1'});
         b.put((byte)1); // item list
-        b.putInt(0x00000100).putShort((short)320).putShort((short)260).put((byte)4).put((byte)0);
+        b.putInt(0x00000100).putShort((short)320).putShort((short)260).putShort((short)4).put((byte)0);
         b.put((byte)1); // object list
-        b.putInt(0x00000200).putShort((short)360).putShort((short)260).put((byte)267).put((byte)0);
+        b.putInt(0x00000200).putShort((short)360).putShort((short)260).putShort((short)267).put((byte)0);
         b.put((byte)0).putShort((short)0xFFFF).putShort((short)0xFFFF); // class, left/right skill
         for (int i=0;i<16;i++) b.putShort((short)(i<8 ? 0x0100+i : 0xFFFF)).put((byte)(i%2));
         return Arrays.copyOf(b.array(), b.position());
@@ -37,7 +37,7 @@ public class D2ModUdpAdapterTest {
         String status = "D2Android-1.13c-native;game=" + gameHash + ";common=verified;client=verified";
         byte[] packet = new byte[10 + status.length()];
         packet[0]='D'; packet[1]='2'; packet[2]='A'; packet[3]='M';
-        packet[4]=2; packet[5]=1; packet[8]=1; packet[9]=(byte)status.length();
+        packet[4]=3; packet[5]=1; packet[8]=1; packet[9]=(byte)status.length();
         System.arraycopy(status.getBytes(java.nio.charset.StandardCharsets.UTF_8),0,packet,10,status.length());
         D2ModUdpAdapter adapter = new D2ModUdpAdapter();
         adapter.handlePacket(packet,packet.length);
