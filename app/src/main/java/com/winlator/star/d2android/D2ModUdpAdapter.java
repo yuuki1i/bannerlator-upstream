@@ -35,18 +35,30 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         }
     }
 
+    public static final class Thing {
+        public final long id;
+        public final int x, y, kind, extra;
+        Thing(long id, int x, int y, int kind, int extra) {
+            this.id=id; this.x=x; this.y=y; this.kind=kind; this.extra=extra;
+        }
+    }
+
     public static final class GameState {
         public final int width, height, playerX, playerY, hoverType;
         public final long hoverId;
         public final List<Monster> monsters;
+        public final List<Thing> items, objects;
         public final int[] hotkeySkills;
         public final boolean[] hotkeyLeft;
         public final long receivedAt;
         GameState(int width, int height, int playerX, int playerY, int hoverType,
-                  long hoverId, List<Monster> monsters, int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
+                  long hoverId, List<Monster> monsters, List<Thing> items, List<Thing> objects,
+                  int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
             this.width=width; this.height=height; this.playerX=playerX; this.playerY=playerY;
             this.hoverType=hoverType; this.hoverId=hoverId;
             this.monsters=Collections.unmodifiableList(monsters);
+            this.items=Collections.unmodifiableList(items);
+            this.objects=Collections.unmodifiableList(objects);
             this.hotkeySkills=hotkeySkills; this.hotkeyLeft=hotkeyLeft; this.receivedAt=receivedAt;
         }
     }
@@ -206,6 +218,47 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         }
     }
 
+    @Override public void openPanel(int panel) {
+        GameState current = freshState();
+        if (panel == 4) {
+            if (current != null && current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL)
+                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
+                        2, current.hoverId));
+            return;
+        }
+        final int[] keys = {0x43, 0x54, 0x4F, 0x49};
+        if (panel >= 0 && panel < keys.length) send(D2CommandPacket.keyPress(keys[panel]));
+    }
+
+    @Override public void autoPickup() {
+        GameState current = freshState();
+        if (current == null || current.items.isEmpty()) return;
+        Thing nearest = null;
+        double best = 240.0 * 240.0;
+        for (Thing item : current.items) {
+            double dx=item.x-current.playerX, dy=item.y-current.playerY;
+            double distance=dx*dx+dy*dy;
+            if (distance < best) { best=distance; nearest=item; }
+        }
+        if (nearest != null) send(D2CommandPacket.take(4, nearest.id));
+    }
+
+    @Override public void talk() {
+        GameState current = freshState();
+        if (current == null || current.hoverType != 1 || current.hoverId == 0xFFFFFFFFL) return;
+        for (Monster monster : current.monsters) {
+            if (monster.id == current.hoverId && (monster.flags & 16) != 0) {
+                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
+                        1, current.hoverId));
+                return;
+            }
+        }
+    }
+
+    @Override public void sortInventory() {
+        send(D2CommandPacket.sortInventory(false));
+    }
+
     @Override public void cycleTarget(int direction) {
         GameState current = freshState();
         if (current == null || current.monsters.isEmpty()) return;
@@ -314,8 +367,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                 byte[] name=new byte[nameLength]; b.get(name);
                 monsters.add(new Monster(id,x,y,hp,flags,new String(name,StandardCharsets.UTF_8)));
             }
-            skipThings(b); // item list
-            skipThings(b); // object list
+            List<Thing> items=parseThings(b);
+            List<Thing> objects=parseThings(b);
             int[] hotkeys = new int[16];
             boolean[] left = new boolean[16];
             java.util.Arrays.fill(hotkeys, -1);
@@ -329,15 +382,21 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                     left[i] = (b.get() & 0xFF) != 0;
                 }
             }
-            return new GameState(width,height,playerX,playerY,hoverType,hoverId,monsters,hotkeys,left,System.currentTimeMillis());
+            return new GameState(width,height,playerX,playerY,hoverType,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
         } catch (RuntimeException e) { return null; }
     }
 
-    private static void skipThings(ByteBuffer b) {
+    private static List<Thing> parseThings(ByteBuffer b) {
         if (!b.hasRemaining()) throw new IllegalArgumentException("Missing unit list");
         int count = b.get() & 0xFF;
         if (count > 128 || b.remaining() < count * 10) throw new IllegalArgumentException("Invalid unit list");
-        b.position(b.position() + count * 10);
+        List<Thing> result = new ArrayList<>(count);
+        for (int i=0;i<count;i++) {
+            long id=b.getInt() & 0xFFFFFFFFL;
+            int x=b.getShort(), y=b.getShort(), kind=b.get() & 0xFF, extra=b.get() & 0xFF;
+            result.add(new Thing(id,x,y,kind,extra));
+        }
+        return result;
     }
 
     private void send(byte[] bytes) {
