@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoCloseable {
     public static final int APP_PORT = 7958, MOD_PORT = 7959;
+    private static final int PROTOCOL_VERSION = 3;
     private static final int STATUS_HOOKED = 1;
     private static final long STATE_MAX_AGE_MS = 500;
 
@@ -435,7 +436,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     void handlePacket(byte[] data, int length) {
         if (length < 8 || data[0] != 'D' || data[1] != '2' || data[2] != 'A' || data[3] != 'M'
-                || (data[4] & 0xFF) != 2) return;
+                || (data[4] & 0xFF) != PROTOCOL_VERSION) return;
         lastPacketAt = System.currentTimeMillis();
         int type = data[5] & 0xFF;
         if (type == 1 && length >= 10) {
