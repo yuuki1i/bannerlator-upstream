@@ -48,8 +48,13 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR commandLine,int s
         DWORD error=GetLastError(); VirtualFreeEx(pi.hProcess,remote,0,MEM_RELEASE);
         TerminateProcess(pi.hProcess,1); return fail("Could not inject the 1.13c touch module",error);
     }
-    WaitForSingleObject(inject,10000);
+    DWORD waitResult=WaitForSingleObject(inject,10000);
     DWORD moduleResult=0;
+    if (waitResult != WAIT_OBJECT_0) {
+        CloseHandle(inject); VirtualFreeEx(pi.hProcess,remote,0,MEM_RELEASE);
+        TerminateProcess(pi.hProcess,1); CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+        return fail("Timed out while loading the 1.13c touch module",ERROR_TIMEOUT);
+    }
     GetExitCodeThread(inject,&moduleResult);
     CloseHandle(inject);
     VirtualFreeEx(pi.hProcess,remote,0,MEM_RELEASE);
