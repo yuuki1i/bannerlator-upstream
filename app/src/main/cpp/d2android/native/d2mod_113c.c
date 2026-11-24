@@ -33,6 +33,7 @@
 #define CMD_SORT 24
 #define CMD_KEY_PRESS 36
 #define CMD_GROUND_SKILL 37
+#define CMD_TAP 38
 
 #define PHASE_DOWN 0
 #define PHASE_HOLD 1
@@ -139,6 +140,11 @@ typedef struct {
     DWORD expires, lastPress;
 } GroundAction;
 static GroundAction g_ground[2];
+typedef struct {
+    int active, button, x, y;
+    DWORD expires;
+} TapAction;
+static TapAction g_tap[2];
 
 static char g_game_hash[65];
 static char g_common_hash[65];
@@ -388,6 +394,21 @@ static void process_command(const BYTE* p, unsigned length) {
         BYTE vk = p[8];
         keybd_event(vk, 0, 0, 0);
         keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+    } else if (cmd == CMD_TAP && length >= 14) {
+        int button=p[8], phase=p[9];
+        if (button != BUTTON_LEFT && button != BUTTON_RIGHT) return;
+        TapAction* tap=&g_tap[button];
+        int x=(short)(p[10]|(p[11]<<8)), y=(short)(p[12]|(p[13]<<8));
+        if (phase == PHASE_UP) {
+            if (tap->active) click_ground(button==BUTTON_RIGHT?5u:2u,tap->x,tap->y);
+            memset(tap,0,sizeof(*tap));
+        } else if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
+            if (!tap->active) click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            tap->active=1; tap->button=button; tap->x=x; tap->y=y; tap->expires=now_ms()+650;
+        } else if (phase == PHASE_CLICK) {
+            click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            click_ground(button==BUTTON_RIGHT?5u:2u,x,y);
+        }
     } else if (cmd == CMD_GROUND_SKILL && length >= 14) {
         int button = p[8], phase = p[9];
         if (button != BUTTON_LEFT && button != BUTTON_RIGHT) return;
@@ -560,6 +581,14 @@ static void game_tick(void) {
         int x,y; walk_point(g_walk.dx,g_walk.dy,&x,&y);
         click_ground(2,x,y);
         g_walk.stopping=0;
+    }
+
+    for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
+        TapAction* tap=&g_tap[button];
+        if (tap->active && (LONG)(now-tap->expires)>=0) {
+            click_ground(button==BUTTON_RIGHT?5u:2u,tap->x,tap->y);
+            memset(tap,0,sizeof(*tap));
+        }
     }
 
     for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
