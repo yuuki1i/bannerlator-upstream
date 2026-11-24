@@ -520,10 +520,10 @@ static void send_status(void) {
 
 static void send_state(void) {
     UnitAny* player = fGetPlayerUnit();
-    if (!player) return;
-    int level=level_number(player), in_town=is_town_level(level);
+    int level=player ? level_number(player) : 0;
+    int in_town=is_town_level(level);
     int player_x=0, player_y=0;
-    unit_screen(player,&player_x,&player_y);
+    if (player) unit_screen(player,&player_x,&player_y);
     UnitAny* hover=fGetSelectedUnit();
     DWORD hover_type=hover ? *(DWORD*)((BYTE*)hover+U_TYPE) : 0xFF;
     DWORD hover_id=hover ? *(DWORD*)((BYTE*)hover+U_ID) : 0xFFFFFFFF;
