@@ -84,6 +84,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile int activeSkillSlot = -1;
     private volatile long activeSkillTargetId = -1;
     private volatile int activeSkillTargetType = -1;
+    private volatile boolean groundSkillHeld;
     private ScheduledFuture<?> attackKeepAlive;
     private ScheduledFuture<?> skillKeepAlive;
 
@@ -138,14 +139,31 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         if (activeSkillSlot < 0 || strength < 0.12f) return;
         GameState current = freshState();
         if (current == null) return;
-        List<Monster> candidates = D2TargetSelector.rank(
-                current.monsters, current.playerX, current.playerY, aimX, aimY);
-        if (candidates.isEmpty()) return;
-        Monster chosen = candidates.get(0);
-        if (chosen.id == activeSkillTargetId) return;
         SkillBinding binding = skill(activeSkillSlot);
         int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                 : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+        List<Monster> candidates = D2TargetSelector.rank(
+                current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) {
+            if (activeSkillTargetId >= 0) {
+                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
+                activeSkillTargetId = -1;
+                activeSkillTargetType = -1;
+            }
+            int dx=Math.round(aimX*260f), dy=Math.round(aimY*260f);
+            send(D2CommandPacket.groundSkill(button,
+                    groundSkillHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN, dx, dy));
+            groundSkillHeld = true;
+            return;
+        }
+        if (groundSkillHeld) {
+            send(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                    Math.round(aimX*260f), Math.round(aimY*260f)));
+            groundSkillHeld = false;
+        }
+        Monster chosen = candidates.get(0);
+        if (chosen.id == activeSkillTargetId) return;
         if (activeSkillTargetId >= 0) {
             send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
                     activeSkillTargetType, activeSkillTargetId));
@@ -230,13 +248,18 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                 if (skillKeepAlive != null) skillKeepAlive.cancel(false);
                 skillKeepAlive = sender.scheduleAtFixedRate(() -> {
                     int active = activeSkillSlot;
-                    long activeId = activeSkillTargetId;
-                    int activeType = activeSkillTargetType;
-                    if (active < 0 || activeId < 0 || activeType < 0) return;
+                    if (active < 0) return;
                     SkillBinding activeBinding = skill(active);
                     int activeButton = activeBinding == null ? D2CommandPacket.BUTTON_RIGHT
                             : (activeBinding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
-                    send(D2CommandPacket.unit(activeButton, D2CommandPacket.PHASE_HOLD, activeType, activeId));
+                    long activeId = activeSkillTargetId;
+                    int activeType = activeSkillTargetType;
+                    if (activeId >= 0 && activeType >= 0) {
+                        send(D2CommandPacket.unit(activeButton, D2CommandPacket.PHASE_HOLD, activeType, activeId));
+                    } else if (groundSkillHeld) {
+                        send(D2CommandPacket.groundSkill(activeButton, D2CommandPacket.PHASE_HOLD,
+                                Math.round(aimX*260f), Math.round(aimY*260f)));
+                    }
                 }, 180, 180, TimeUnit.MILLISECONDS);
             }
         } else {
@@ -248,9 +271,14 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                 send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
                         activeSkillTargetType, activeSkillTargetId));
             }
+            if (groundSkillHeld) {
+                send(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                        Math.round(aimX*260f), Math.round(aimY*260f)));
+            }
             activeSkillSlot = -1;
             activeSkillTargetId = -1;
             activeSkillTargetType = -1;
+            groundSkillHeld = false;
         }
     }
 
@@ -461,12 +489,16 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void close() {
         if (walking) sendDirect(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
-        if (activeSkillSlot >= 0 && activeSkillTargetId >= 0) {
+        if (activeSkillSlot >= 0) {
             SkillBinding binding = skill(activeSkillSlot);
             int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                     : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
-            sendDirect(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
-                    activeSkillTargetType, activeSkillTargetId));
+            if (activeSkillTargetId >= 0)
+                sendDirect(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
+            if (groundSkillHeld)
+                sendDirect(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                        Math.round(aimX*260f), Math.round(aimY*260f)));
         }
         if (attackHeld) {
             GameState current = freshState();
