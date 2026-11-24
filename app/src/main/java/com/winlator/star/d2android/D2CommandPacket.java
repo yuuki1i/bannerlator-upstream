@@ -62,9 +62,6 @@ public final class D2CommandPacket {
                 .putInt((int) unitId).array();
     }
 
-    public static byte[] sortInventory(boolean charmsFixed) {
-        return command(CMD_SORT, 2).put((byte) 0).put((byte) (charmsFixed ? 1 : 0)).array();
-    }
 
     public static byte[] keyPress(int virtualKey) {
         if (virtualKey < 1 || virtualKey > 0xFF) throw new IllegalArgumentException("Invalid virtual key");
