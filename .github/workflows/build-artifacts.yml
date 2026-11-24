@@ -8,7 +8,7 @@ on:
   # Every push to main builds too (log-only "[skip ci]" commits and docs don't), so main's caches
   # stay fresh: branches can only restore main's caches, and setup-gradle writes only on main.
   push:
-    branches: [main]
+    branches: [main, d2android-1.13c]
     paths-ignore:
       - 'PROGRESS_LOG.md'
       - '**/*.md'
