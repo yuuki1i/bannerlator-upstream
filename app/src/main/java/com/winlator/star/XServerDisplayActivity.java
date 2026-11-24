@@ -12753,8 +12753,8 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (shortcut == null) return false;
         String executable = getExecutable();
         if (executable == null) return false;
-        if ("启动游戏.exe".equalsIgnoreCase(executable)
-                || "启动游戏.bat".equalsIgnoreCase(executable)) return true;
+        if (D2LauncherProfile.LAUNCHER_EXE.equalsIgnoreCase(executable)
+                || D2LauncherProfile.LAUNCHER_BAT.equalsIgnoreCase(executable)) return true;
         if (!"game.exe".equalsIgnoreCase(executable)) return false;
         String args = shortcut.getExtra("execArgs");
         if (args == null) return false;
