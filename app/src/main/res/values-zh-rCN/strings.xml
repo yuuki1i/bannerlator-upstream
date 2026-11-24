@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Simplified Chinese launcher localization: core navigation, common actions and setup. -->
+    <string name="app_name">Bannerlator · 游戏掌机</string>
+    <string name="run">启动</string><string name="edit">编辑</string><string name="remove">删除</string><string name="add">添加</string>
+    <string name="shortcuts">游戏库</string><string name="containers">容器</string><string name="input_controls">触控与按键</string>
+    <string name="no_items_to_display">暂无内容</string>
+    <string name="new_container">新建容器</string><string name="edit_container">编辑容器</string><string name="new_container_defaults">新容器默认设置</string>
+    <string name="new_container_defaults_saved">已保存新容器默认设置</string><string name="new_container_defaults_save_failed">保存默认设置失败</string>
+    <string name="reset_to_app_defaults">恢复应用默认值</string><string name="creating_container">正在创建容器…</string><string name="removing_container">正在删除容器…</string>
+    <string name="duplicating_container">正在复制容器…</string><string name="installing_system_files">正在安装系统文件…</string><string name="updating_system_files">正在更新系统文件…</string>
+    <string name="starting_up">正在启动…</string><string name="unable_to_install_system_files">系统文件安装失败</string>
+    <string name="keyboard">键盘</string><string name="mouse">鼠标</string><string name="binding_filter_all">全部</string><string name="binding_filter_keyboard">键盘</string><string name="binding_filter_mouse">鼠标</string><string name="binding_filter_gamepad">手柄</string>
+    <string name="toggle_fullscreen">切换全屏</string><string name="exit">退出</string><string name="no_control_element_selected">未选择控件</string>
+    <string name="scale">缩放</string><string name="dead_zone">死区</string><string name="shape">形状</string><string name="type">类型</string><string name="binding">按键绑定</string>
+    <string name="binding_up">上</string><string name="binding_right">右</string><string name="binding_down">下</string><string name="binding_left">左</string>
+    <string name="detection_area">检测区域</string><string name="area_width">区域宽度</string><string name="area_height">区域高度</string><string name="stick_radius">摇杆半径</string><string name="mouse_sensitivity">鼠标灵敏度</string>
+    <string name="area_appearance">区域外观</string><string name="independent_area_appearance">独立设置颜色与透明度</string><string name="area_color">区域颜色</string><string name="area_opacity">区域透明度</string>
+    <string name="grid_rows">行数</string><string name="grid_cols">列数</string><string name="overlay_opacity">悬浮控件透明度</string><string name="editing_in_game">游戏内编辑</string><string name="save_and_close">保存并关闭</string>
+    <string name="control_type_android_keyboard">安卓键盘</string><string name="change_control_type">更改控件类型？</string><string name="change_control_type_warning">更改类型会重置按键、组合键、文本、图标及该类型的设置。</string><string name="confirm_change">更改</string>
+    <string name="controls_accent_color">控件强调色</string><string name="profile">配置方案</string><string name="name">名称</string><string name="ok">确定</string><string name="cancel">取消</string><string name="untitled">未命名</string>
+    <string name="no_profile_selected">未选择配置</string><string name="no_profile_found">未找到配置</string><string name="select_control_type">选择控件类型</string>
+    <string name="control_type_button">按钮</string><string name="control_type_d_pad">方向键</string><string name="control_type_range_button">范围按钮</string><string name="control_type_stick">摇杆</string><string name="control_type_trackpad">触控板</string><string name="control_type_dynamic_stick">动态摇杆</string><string name="control_type_mouse_area">鼠标区域</string><string name="control_type_button_grid">按钮网格</string><string name="control_type_expandable_button">展开按钮</string>
+    <string name="expandable_button_settings">展开按钮设置</string><string name="expandable_layout">布局</string><string name="expandable_layout_radial">环形</string><string name="expandable_layout_list">列表</string><string name="expandable_direction">列表方向</string><string name="child_button_count">子按钮数量</string><string name="child_button_label">按钮 %1$d</string>
+    <string name="direction_up">上</string><string name="direction_right">右</string><string name="direction_down">下</string><string name="direction_left">左</string>
+    <string name="control_shape_circle">圆形</string><string name="control_shape_rectangle">矩形</string><string name="control_shape_rounded_rectangle">圆角矩形</string><string name="control_shape_square">正方形</string>
+    <string name="control_range_a_z">A 至 Z</string><string name="control_range_0_9">0 至 9</string><string name="control_range_f1_f12">F1 至 F12</string><string name="control_range_numpad_0_9">数字键盘 0 至 9</string>
+    <string name="set_background_image">设置背景图</string><string name="select_background_image">选择背景图片</string><string name="select_icon_image">选择图标</string><string name="clear_background">清除背景</string><string name="browse_files">浏览文件</string><string name="pick_via_system">使用系统选择器…</string><string name="background_image_set">背景已设置</string><string name="background_cleared">背景已清除</string><string name="unable_to_load_image">无法加载图片</string>
+    <string name="opacity_percent">透明度：%1$d%%</string><string name="binding_setup_title">绑定设置 — %1$s</string><string name="binding_text_value">字符或数字</string><string name="binding_selector">动作选择器</string><string name="set_binding">设置</string><string name="add_to_combo">加入组合键</string><string name="combo_bindings">组合键</string>
+    <string name="mouse_binding_priority">优先鼠标绑定</string><string name="mouse_binding_priority_description">此控件显示时，禁用对应的触屏点击。</string><string name="binding_grid_cell_label">第%1$d行第%2$d列</string><string name="binding_slot_label">绑定 %1$d</string>
+    <string name="fill_qwerty">填充：QWERTY</string><string name="fill_function_keys">填充：F1–F12</string><string name="fill_numpad">填充：数字键盘</string><string name="hold_key">按住按键（激活期间持续按下）</string>
+    <string name="button_grid">按钮网格</string><string name="cell_shape">单元格形状</string><string name="grid_spacing">按钮间距</string><string name="grid_multitouch">多点触控</string><string name="custom_icons">自定义图标</string><string name="tint_custom_icon">使用强调色染色图标</string><string name="use_custom_icon_as_button">使用自定义图标作为按钮</string><string name="icon_content_description">图标 %1$d</string><string name="long_press_custom_icon_to_delete">长按未使用的自定义图标可删除。</string><string name="delete_custom_icon">删除自定义图标</string><string name="delete_custom_icon_confirmation">自定义图标在所有配置间共享。确定删除未使用的图标？</string>
+    <string name="clear">清除</string><string name="settings">设置</string><string name="about">关于</string><string name="games">游戏</string><string name="home">首页</string><string name="tools">工具</string><string name="downloads">下载</string><string name="save">保存</string><string name="search">搜索</string><string name="back">返回</string><string name="done">完成</string>
+</resources>
