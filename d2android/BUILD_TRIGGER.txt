@@ -1,0 +1,3 @@
+Build trigger for the d2android-1.13c integration branch.
+
+This file intentionally ensures the existing build-artifacts workflow sees a non-documentation change and attempts the Android APK artifact build. It does not imply that the D2 1.13c native input adapter is complete or enabled.
