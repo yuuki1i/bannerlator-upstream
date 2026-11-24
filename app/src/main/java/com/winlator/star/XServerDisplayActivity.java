@@ -12757,6 +12757,36 @@ public class XServerDisplayActivity extends AppCompatActivity {
         return lower.contains("-3dfx") && lower.contains("-direct");
     }
 
+    private File resolveD2GameDirectory() {
+        if (shortcut == null || container == null || shortcut.path == null) return null;
+        String winPath = shortcut.path.replace('\\\\', '/');
+        if (winPath.length() < 3 || winPath.charAt(1) != ':') return null;
+        char drive = Character.toLowerCase(winPath.charAt(0));
+        File driveRoot;
+        if (drive == 'z') {
+            driveRoot = imageFs != null ? imageFs.getRootDir() : null;
+        } else if (drive == 'c') {
+            driveRoot = new File(container.getRootDir(), "drive_c");
+        } else {
+            return null;
+        }
+        if (driveRoot == null) return null;
+        File executable = new File(driveRoot, winPath.substring(3));
+        return executable.getParentFile();
+    }
+
+    private boolean ensureD2RuntimeFiles() {
+        File gameDir = resolveD2GameDirectory();
+        if (gameDir == null || !new File(gameDir, "game.exe").isFile()) return false;
+        File launcher = new File(gameDir, "D2AndroidLauncher.exe");
+        File module = new File(gameDir, "d2android_mod.dll");
+        com.winlator.star.core.FileUtils.copy(this,
+                "bannerin-xinput/d2android/D2AndroidLauncher.exe", launcher);
+        com.winlator.star.core.FileUtils.copy(this,
+                "bannerin-xinput/d2android/d2android_mod.dll", module);
+        return launcher.isFile() && launcher.length() > 0 && module.isFile() && module.length() > 0;
+    }
+
     private void startD2TouchSession(FrameLayout root) {
         if (!isD2CollectorShortcut()) return;
         d2TouchRoot = root;
@@ -16496,6 +16526,7 @@ return true;
         }
 
         if (shortcut != null) {
+            boolean d2LauncherReady = isD2CollectorShortcut() && ensureD2RuntimeFiles();
             String execArgs = shortcut.getExtra("execArgs");
             // Windows Steam with GPU drawing: Steam's -cef-disable-gpu is left out (see windowsSteamGpuDrawing).
             if (windowsSteamSession && windowsSteamGpuDrawing())
@@ -16532,6 +16563,7 @@ return true;
                 // existing shortcut works and a stale loader shortcut is repaired). Same folder → /dir holds.
                 String goldbergName = resolveGoldbergLaunchName(filename);
                 if (goldbergName != null) filename = goldbergName;
+                if (d2LauncherReady) filename = "D2AndroidLauncher.exe";
 
                 args += "/dir " + StringUtils.escapeDOSPath(exeDir) + " \"" + filename + "\"" + execArgs;
             }
