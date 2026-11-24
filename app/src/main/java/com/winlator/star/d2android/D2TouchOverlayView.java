@@ -25,7 +25,9 @@ public final class D2TouchOverlayView extends View {
     private int movePointer = -1;
     private int attackPointer = -1;
     private int skillPointer = -1;
+    private int tapPointer = -1;
     private int editPointer = -1;
+    private float tapX, tapY;
     private int activeSkill = -1;
     private int skillPage = 0;
     private boolean menuOpen;
@@ -331,7 +333,6 @@ public final class D2TouchOverlayView extends View {
                         skillY = rect.centerY();
                         skillRadius = Math.max(1f, Math.min(rect.width(), rect.height()) * .58f);
                         if (bridge != null) {
-                            bridge.selectSkill(slot);
                             bridge.castSkill(slot, true);
                         }
                         updateAim(x, y);
@@ -340,7 +341,13 @@ public final class D2TouchOverlayView extends View {
                     }
                 }
             }
-            return movePointer != -1 || attackPointer != -1 || skillPointer != -1;
+            if (tapPointer == -1 && bridge != null && getWidth() > 0 && getHeight() > 0) {
+                tapPointer = id;
+                tapX = x; tapY = y;
+                bridge.tap(x / getWidth(), y / getHeight(), true);
+                return true;
+            }
+            return movePointer != -1 || attackPointer != -1 || skillPointer != -1 || tapPointer != -1;
         }
 
         if (action == MotionEvent.ACTION_MOVE) {
@@ -349,8 +356,13 @@ public final class D2TouchOverlayView extends View {
                 float px = event.getX(p), py = event.getY(p);
                 if (pointer == movePointer) updateMove(px, py);
                 if (pointer == skillPointer) updateAim(px, py);
+                if (pointer == tapPointer) {
+                    tapX = px; tapY = py;
+                    if (bridge != null && getWidth() > 0 && getHeight() > 0)
+                        bridge.tap(px / getWidth(), py / getHeight(), true);
+                }
             }
-            return movePointer != -1 || attackPointer != -1 || skillPointer != -1;
+            return movePointer != -1 || attackPointer != -1 || skillPointer != -1 || tapPointer != -1;
         }
 
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
@@ -438,6 +450,11 @@ public final class D2TouchOverlayView extends View {
             activeSkill = -1;
             if (bridge != null && releasedSkill >= 0) bridge.castSkill(releasedSkill, false);
         }
+        if (pointerId == tapPointer) {
+            tapPointer = -1;
+            if (bridge != null && getWidth() > 0 && getHeight() > 0)
+                bridge.tap(tapX / getWidth(), tapY / getHeight(), false);
+        }
     }
 
     private void releasePointers() {
@@ -445,10 +462,13 @@ public final class D2TouchOverlayView extends View {
             if (movePointer != -1) bridge.move(D2JoystickMath.Vector.zero());
             if (attackPointer != -1) bridge.attack(false);
             if (skillPointer != -1 && activeSkill >= 0) bridge.castSkill(activeSkill, false);
+            if (tapPointer != -1 && getWidth() > 0 && getHeight() > 0)
+                bridge.tap(tapX / getWidth(), tapY / getHeight(), false);
         }
         movePointer = -1;
         attackPointer = -1;
         skillPointer = -1;
+        tapPointer = -1;
         activeSkill = -1;
         editPointer = -1;
         editingElement = null;
