@@ -13,7 +13,6 @@ public final class D2CommandPacket {
     public static final int PROTOCOL_VERSION = 1;
     public static final int CMD_DRINK = 1;
     public static final int CMD_UNIT = 2;
-    public static final int CMD_HIGHLIGHT = 3;
     public static final int CMD_WALK = 4;
     public static final int CMD_PORTAL = 7;
     public static final int CMD_NPC = 8;
@@ -56,10 +55,6 @@ public final class D2CommandPacket {
         if (phase < PHASE_DOWN || phase > PHASE_CLICK) throw new IllegalArgumentException("Invalid unit phase");
         return command(CMD_UNIT, 12).put((byte) button).put((byte) phase).put((byte) 0).put((byte) 0)
                 .putInt(unitType).putInt((int) unitId).array();
-    }
-
-    public static byte[] highlight(int unitType, long unitId) {
-        return command(CMD_HIGHLIGHT, 8).putInt(unitType).putInt((int) unitId).array();
     }
 
     public static byte[] take(int unitType, long unitId) {
