@@ -83,6 +83,8 @@ public final class D2TouchOverlayView extends View {
             drawElement(canvas, profile.skills[slot], "F" + (slot + 1));
         }
         drawElement(canvas, profile.skillPageToggle, skillPage == 0 ? "1/2" : "2/2");
+        drawElement(canvas, profile.targetPrev, "目标-");
+        drawElement(canvas, profile.targetNext, "目标+");
         if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
         if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
         if (editingElement != null) {
@@ -117,6 +119,8 @@ public final class D2TouchOverlayView extends View {
     }
 
     private D2ControlProfile.Element elementAt(float x, float y) {
+        if (contains(profile.targetPrev, x, y)) return profile.targetPrev;
+        if (contains(profile.targetNext, x, y)) return profile.targetNext;
         if (contains(profile.skillPageToggle, x, y)) return profile.skillPageToggle;
         for (int i = 3; i >= 0; i--) {
             int slot = skillPage * 4 + i;
@@ -156,6 +160,14 @@ public final class D2TouchOverlayView extends View {
                 attackPointer = id;
                 if (bridge != null) bridge.attack(true);
                 invalidate();
+                return true;
+            }
+            if (contains(profile.targetPrev, x, y)) {
+                if (bridge != null) bridge.cycleTarget(-1);
+                return true;
+            }
+            if (contains(profile.targetNext, x, y)) {
+                if (bridge != null) bridge.cycleTarget(1);
                 return true;
             }
             if (contains(profile.skillPageToggle, x, y)) {
