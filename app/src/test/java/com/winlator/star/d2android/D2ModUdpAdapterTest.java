@@ -23,6 +23,9 @@ public class D2ModUdpAdapterTest {
         b.put((byte)1).put((byte)1); // raw count, monster count
         b.putInt(0x10203040).putShort((short)340).putShort((short)260);
         b.put((byte)75).put((byte)2).put((byte)4).put(new byte[]{'O','r','c','1'});
+        b.put((byte)0).put((byte)0); // item and object lists
+        b.put((byte)0).putShort((short)0xFFFF).putShort((short)0xFFFF); // class, left/right skill
+        for (int i=0;i<16;i++) b.putShort((short)(i<8 ? 0x0100+i : 0xFFFF)).put((byte)(i%2));
         return Arrays.copyOf(b.array(), b.position());
     }
 
@@ -39,6 +42,9 @@ public class D2ModUdpAdapterTest {
         assertEquals(1, state.monsters.size());
         assertEquals(0x10203040L, state.monsters.get(0).id);
         assertEquals("Orc1", state.monsters.get(0).name);
+        assertEquals(0x0103, state.hotkeySkills[3]);
+        assertTrue(state.hotkeyLeft[3]);
+        assertEquals(-1, state.hotkeySkills[9]);
     }
 
     @Test public void rejectsWrongProtocolAndTruncatedState() {
