@@ -26,7 +26,7 @@ public final class D2TouchOverlayView extends View {
     private int attackPointer = -1;
     private int skillPointer = -1;
     private int editPointer = -1;
-    private int activeSkill = -1;
+    private int activeSkill = -1;\n    private int skillPage = 0;
 
     private float moveX, moveY, moveRadius;
     private float skillX, skillY, skillRadius;
