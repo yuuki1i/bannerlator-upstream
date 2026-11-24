@@ -34,6 +34,7 @@ public final class D2TouchOverlayView extends View {
     private float skillX, skillY, skillRadius;
     private float editOffsetX, editOffsetY;
     private D2ControlProfile.Element editingElement;
+    private D2ControlProfile.Element selectedForEdit;
     private boolean editing;
 
     public D2TouchOverlayView(Context context, D2CommandBridge bridge) {
@@ -55,6 +56,7 @@ public final class D2TouchOverlayView extends View {
         if (this.editing == editing) return;
         releasePointers();
         this.editing = editing;
+        if (!editing) selectedForEdit = null;
         invalidate();
     }
 
@@ -90,7 +92,8 @@ public final class D2TouchOverlayView extends View {
         if (menuOpen) drawMenu(canvas);
         if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
         if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
-        if (editingElement != null) {
+        if (editing) drawEditorPanel(canvas);
+        if (selectedForEdit != null) {
             paint.setColor(0xFFFFFFFF);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f);
@@ -100,7 +103,7 @@ public final class D2TouchOverlayView extends View {
     }
 
     private static final String[] MENU_LABELS = {
-            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话"
+            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "编辑布局"
     };
 
     private RectF menuBounds(int index) {
@@ -139,6 +142,66 @@ public final class D2TouchOverlayView extends View {
 
         }
         menuOpen = false;
+        invalidate();
+    }
+
+    private RectF editorDoneBounds() {
+        float d = getResources().getDisplayMetrics().density;
+        return new RectF(getWidth() - 92f*d, 10f*d, getWidth() - 10f*d, 48f*d);
+    }
+
+    private RectF editorButtonBounds(int index) {
+        float d = getResources().getDisplayMetrics().density;
+        float buttonWidth = 54f*d, gap = 5f*d, total = 5*buttonWidth + 4*gap;
+        float left = (getWidth() - total) * .5f;
+        float top = getHeight() - 58f*d;
+        return new RectF(left + index*(buttonWidth+gap), top,
+                left + index*(buttonWidth+gap) + buttonWidth, top + 44f*d);
+    }
+
+    private void drawEditorPanel(Canvas canvas) {
+        float d = getResources().getDisplayMetrics().density;
+        RectF panel = new RectF(editorButtonBounds(0).left - 6f*d,
+                editorButtonBounds(0).top - 6f*d,
+                editorButtonBounds(4).right + 6f*d,
+                editorButtonBounds(4).bottom + 6f*d);
+        paint.setColor(0xE6222630);
+        canvas.drawRoundRect(panel, 10f*d, 10f*d, paint);
+        String[] labels = {"大小+", "大小-", "透明+", "透明-", "形状"};
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(12f*d);
+        for (int i=0;i<labels.length;i++) {
+            RectF r = editorButtonBounds(i);
+            paint.setColor(0xB0444C5C);
+            canvas.drawRoundRect(r, 6f*d, 6f*d, paint);
+            paint.setColor(0xF2FFFFFF);
+            canvas.drawText(labels[i], r.centerX(), r.centerY()+4f*d, paint);
+        }
+        RectF done = editorDoneBounds();
+        paint.setColor(0xE6337048);
+        canvas.drawRoundRect(done, 8f*d, 8f*d, paint);
+        paint.setColor(0xFFFFFFFF);
+        canvas.drawText("完成", done.centerX(), done.centerY()+5f*d, paint);
+    }
+
+    private void adjustSelectedElement(int action) {
+        if (selectedForEdit == null) return;
+        D2ControlProfile.Element e = selectedForEdit;
+        float x=e.x, y=e.y, w=e.width, h=e.height, opacity=e.opacity;
+        D2ControlProfile.Shape shape=e.shape;
+        if (action == 0 || action == 1) {
+            float delta = action == 0 ? .015f : -.015f;
+            w=Math.max(.025f,Math.min(.6f,w+delta));
+            h=Math.max(.025f,Math.min(.6f,h+delta));
+            x=Math.min(x,1f-w); y=Math.min(y,1f-h);
+        } else if (action == 2) opacity=Math.min(1f,opacity+.05f);
+        else if (action == 3) opacity=Math.max(.1f,opacity-.05f);
+        else {
+            D2ControlProfile.Shape[] shapes=D2ControlProfile.Shape.values();
+            shape=shapes[(shape.ordinal()+1)%shapes.length];
+        }
+        e.set(x,y,w,h,opacity,shape,e.texture);
+        store.save(profile);
         invalidate();
     }
 
@@ -277,8 +340,13 @@ public final class D2TouchOverlayView extends View {
 
     private boolean handleEditingTouch(MotionEvent event, int action, int id, float x, float y) {
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (editorDoneBounds().contains(x,y)) { setEditing(false); return true; }
+            for (int i=0;i<5;i++) {
+                if (editorButtonBounds(i).contains(x,y)) { adjustSelectedElement(i); return true; }
+            }
             if (editPointer != -1) return true;
             editingElement = elementAt(x, y);
+            selectedForEdit = editingElement;
             if (editingElement != null) {
                 editPointer = id;
                 editOffsetX = x - editingElement.x * getWidth();
