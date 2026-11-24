@@ -247,7 +247,7 @@ static int verify_installation(void) {
     if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindClientSideUnit || !fGetUnitX || !fGetUnitY
             || !fGetMouseXOffset || !fGetMouseYOffset || !fClickMap || !fSetSelectedUnit || !fMapToAbsScreen)
         return 0;
-    _snprintf(g_status_text, sizeof(g_status_text), "game=%s;common=%s;client=1.13c", g_game_hash, g_common_hash);
+    _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=1.13c", g_game_hash, g_common_hash);
     return 1;
 }
 
@@ -365,7 +365,10 @@ static void process_command(const BYTE* p, unsigned length) {
 static void process_commands(void) {
     BYTE buffer[256];
     for (;;) {
-        int n = recv(g_socket, (char*)buffer, sizeof(buffer), 0);
+        struct sockaddr_in source;
+        int source_len = sizeof(source);
+        int n = recvfrom(g_socket, (char*)buffer, sizeof(buffer), 0,
+                         (struct sockaddr*)&source, &source_len);
         if (n == SOCKET_ERROR) {
             if (WSAGetLastError() == WSAEWOULDBLOCK) break;
             break;
