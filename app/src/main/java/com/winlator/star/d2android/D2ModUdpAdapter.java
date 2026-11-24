@@ -132,6 +132,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     @Override public void move(float x, float y, float strength) {
         GameState currentState = freshState();
         if (strength > 0.001f && (currentState == null || !currentState.inGame)) return;
+        if (strength > 0.001f && attackHeld) stopAttackForMovement();
         int dx = Math.round(clamp(x) * 260f);
         int dy = Math.round(clamp(y) * 260f);
         int phase = strength <= 0.001f ? D2CommandPacket.PHASE_UP
@@ -181,6 +182,10 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void attack(boolean pressed) {
         if (pressed) {
+            if (walking) {
+                walking = false;
+                send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+            }
             attackHeld = true;
             sendAttack(D2CommandPacket.PHASE_DOWN);
             synchronized (lock) {
@@ -197,6 +202,15 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             }
             sendAttack(D2CommandPacket.PHASE_UP);
         }
+    }
+
+    private void stopAttackForMovement() {
+        attackHeld = false;
+        synchronized (lock) {
+            if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+            attackKeepAlive = null;
+        }
+        sendAttack(D2CommandPacket.PHASE_UP);
     }
 
     private void sendAttack(int phase) {
