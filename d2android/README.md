@@ -37,6 +37,6 @@ The Standard build now compiles `d2android_mod.dll` and `D2AndroidLauncher.exe` 
 
 Before reporting itself ready, the module checks the measured Collector's Edition 1.13c `Game.exe` and `D2Common.dll` SHA-256 fingerprints and the `D2Client.dll` file size plus its recorded Git blob SHA-1. It uses the 1.13c address table for the client functions; no 1.13d patch bytes or RVAs are reused. A mismatch leaves the overlay disabled.
 
-The touch surface includes continuous joystick movement, separate held attack, F1-F8 skill buttons with drag aiming and target cycling, a panel/pickup/talk menu, and a persisted layout editor (position, size, opacity, shape, built-in texture themes).
+The touch surface includes continuous joystick movement, separate held attack, F1-F8 skill buttons with monster lock or directional ground casts, target cycling, direct tap/drag input for menus and inventory, a nearby-item pickup hint, nearest-stash and town-NPC interaction, and a persisted layout editor (position, size, opacity, shape, built-in texture themes). State protocol v3 carries full 16-bit object class IDs for stash discovery.
 
-Known gaps: no real-device/game smoke test has been completed yet; ground-targeted skills still need a dedicated path, inventory auto-sort is not enabled, and stash opening currently requires the stash object to be the hovered target. These are not represented as completed features.
+Known gaps: no real-device/game smoke test has been completed yet, and inventory auto-sort is not enabled. These are not represented as completed features.
