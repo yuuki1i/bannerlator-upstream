@@ -45,17 +45,18 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     public static final class GameState {
         public final int width, height, playerX, playerY, hoverType;
+        public final boolean inGame;
         public final long hoverId;
         public final List<Monster> monsters;
         public final List<Thing> items, objects;
         public final int[] hotkeySkills;
         public final boolean[] hotkeyLeft;
         public final long receivedAt;
-        GameState(int width, int height, int playerX, int playerY, int hoverType,
+        GameState(int width, int height, int playerX, int playerY, int hoverType, boolean inGame,
                   long hoverId, List<Monster> monsters, List<Thing> items, List<Thing> objects,
                   int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
             this.width=width; this.height=height; this.playerX=playerX; this.playerY=playerY;
-            this.hoverType=hoverType; this.hoverId=hoverId;
+            this.hoverType=hoverType; this.inGame=inGame; this.hoverId=hoverId;
             this.monsters=Collections.unmodifiableList(monsters);
             this.items=Collections.unmodifiableList(items);
             this.objects=Collections.unmodifiableList(objects);
@@ -128,7 +129,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     @Override public void move(float x, float y, float strength) {
-        if (strength > 0.001f && freshState() == null) return;
+        GameState currentState = freshState();
+        if (strength > 0.001f && (currentState == null || !currentState.inGame)) return;
         int dx = Math.round(clamp(x) * 260f);
         int dy = Math.round(clamp(y) * 260f);
         int phase = strength <= 0.001f ? D2CommandPacket.PHASE_UP
@@ -199,7 +201,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     private void sendAttack(int phase) {
         GameState current = freshState();
-        if (current == null) return;
+        if (current == null || !current.inGame) return;
         if (targetId >= 0) {
             boolean stillVisible = false;
             for (Monster monster : current.monsters) {
@@ -233,7 +235,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
             else send(D2CommandPacket.keyPress(0x70 + slot));
             GameState current = freshState();
-            if (current != null) {
+            if (current != null && current.inGame) {
                 long id = targetId >= 0 ? targetId : current.hoverId;
                 int type = targetId >= 0 ? targetType : current.hoverType;
                 if (id == 0xFFFFFFFFL || type < 0) {
@@ -288,7 +290,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     @Override public void openPanel(int panel) {
         GameState current = freshState();
         if (panel == 4) {
-            if (current != null && current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL)
+            if (current != null && current.inGame && current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL)
                 send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
                         2, current.hoverId));
             return;
@@ -299,7 +301,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void autoPickup() {
         GameState current = freshState();
-        if (current == null || current.items.isEmpty()) return;
+        if (current == null || !current.inGame || current.items.isEmpty()) return;
         List<Thing> remaining = new ArrayList<>(current.items);
         for (int n=0; n<8 && !remaining.isEmpty(); n++) {
             Thing nearest = null;
@@ -317,7 +319,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void talk() {
         GameState current = freshState();
-        if (current == null || current.hoverType != 1 || current.hoverId == 0xFFFFFFFFL) return;
+        if (current == null || !current.inGame || current.hoverType != 1 || current.hoverId == 0xFFFFFFFFL) return;
         for (Monster monster : current.monsters) {
             if (monster.id == current.hoverId && (monster.flags & 16) != 0) {
                 send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
@@ -328,7 +330,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     @Override public void sortInventory() {
-        send(D2CommandPacket.sortInventory(false));
+        GameState current = freshState();
+        if (current != null && current.inGame) send(D2CommandPacket.sortInventory(false));
     }
 
     @Override public void tap(float normalizedX, float normalizedY, boolean pressed) {
@@ -449,7 +452,9 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             int width=u16(b), height=u16(b);
             b.getShort(); b.getShort(); // pointer
             b.getInt(); b.getInt(); // UI flags
-            b.getShort(); b.get(); b.get(); // level, town, flags
+            int levelNo=u16(b);
+            b.get(); b.get(); // town, flags
+            boolean inGame = levelNo > 0;
             int playerX=b.getShort(), playerY=b.getShort();
             b.get(); b.get(); // life, mana
             int hoverType=b.get() & 0xFF;
@@ -484,7 +489,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                     left[i] = (b.get() & 0xFF) != 0;
                 }
             }
-            return new GameState(width,height,playerX,playerY,hoverType,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
+            return new GameState(width,height,playerX,playerY,hoverType,inGame,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
         } catch (RuntimeException e) { return null; }
     }
 
