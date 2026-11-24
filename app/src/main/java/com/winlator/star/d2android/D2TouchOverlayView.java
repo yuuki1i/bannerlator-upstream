@@ -54,6 +54,7 @@ public final class D2TouchOverlayView extends View {
 
     public void setEditing(boolean editing) {
         if (this.editing == editing) return;
+        if (this.editing && !editing) finishEditing(false);
         releasePointers();
         this.editing = editing;
         if (!editing) selectedForEdit = null;
@@ -270,7 +271,7 @@ public final class D2TouchOverlayView extends View {
         float x = event.getX(index), y = event.getY(index);
 
         if (action == MotionEvent.ACTION_CANCEL) {
-            if (editing) finishEditing(true);
+            if (editing) finishEditing(false);
             else releasePointers();
             invalidate();
             return true;
