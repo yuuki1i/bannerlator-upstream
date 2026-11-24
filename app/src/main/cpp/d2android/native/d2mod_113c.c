@@ -44,7 +44,6 @@
 
 #define RVA_GET_UNIT_X 0x00001630
 #define RVA_GET_UNIT_Y 0x00001660
-#define RVA_CLICK_MAP 0x0001BF20
 #define RVA_GET_MOUSE_X_OFFSET 0x0003F6C0
 #define RVA_GET_MOUSE_Y_OFFSET 0x0003F6D0
 #define RVA_SET_SELECTED_UNIT 0x00051860
@@ -55,7 +54,6 @@
 #define RVA_MOUSE_Y 0x0011B824
 #define RVA_MOUSE_X 0x0011B828
 #define RVA_VIEWPORT 0x0011C1F8
-#define RVA_ALWAYS_RUN 0x0011C3EC
 #define RVA_SCREEN_SIZE_X 0x000DBC48
 #define RVA_SCREEN_SIZE_Y 0x000DBC4C
 
@@ -82,7 +80,6 @@ typedef UnitAny* (__stdcall *GetSelectedUnitFn)(void);
 typedef UnitAny* (__fastcall *FindUnitFn)(DWORD id, DWORD type);
 typedef int (__fastcall *GetUnitCoordFn)(UnitAny* unit);
 typedef DWORD (__fastcall *GetMouseOffsetFn)(void);
-typedef void (__stdcall *ClickMapFn)(DWORD clickType, DWORD x, DWORD y, DWORD flags);
 typedef void (__stdcall *MapToAbsScreenFn)(int* x, int* y);
 
 typedef struct {
@@ -119,7 +116,6 @@ static GetSelectedUnitFn fGetSelectedUnit;
 static FindUnitFn fFindServerSideUnit, fFindClientSideUnit;
 static GetUnitCoordFn fGetUnitX, fGetUnitY;
 static GetMouseOffsetFn fGetMouseXOffset, fGetMouseYOffset;
-static DWORD fSetSelectedUnit;
 static MapToAbsScreenFn fMapToAbsScreen;
 
 static struct {
@@ -274,11 +270,10 @@ static int verify_installation(void) {
     fGetUnitY = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_Y);
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
     fGetMouseYOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_Y_OFFSET);
-    fSetSelectedUnit = (DWORD)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
     fMapToAbsScreen = (MapToAbsScreenFn)GetProcAddress(g_common, (LPCSTR)11087);
     if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindServerSideUnit || !fFindClientSideUnit
             || !fGetUnitX || !fGetUnitY || !fGetMouseXOffset || !fGetMouseYOffset
-            || !fClickMap || !fSetSelectedUnit || !fMapToAbsScreen)
+            || !fMapToAbsScreen)
         return 0;
     _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=%s",
               g_game_hash, g_common_hash, client_blob);
@@ -324,16 +319,7 @@ static void click_unit(DWORD click_type, int button, DWORD type, DWORD id) {
     if (!unit) return;
     int x, y;
     if (!unit_screen(unit, &x, &y)) return;
-    DWORD a = (DWORD)(uintptr_t)unit, c = (DWORD)(uintptr_t)unit;
-    __asm__ volatile("call *%2" : "+a"(a), "+c"(c) : "r"(fSetSelectedUnit) : "edx", "memory", "cc");
-    DWORD* mouse_x = (DWORD*)((BYTE*)g_client + RVA_MOUSE_X);
-    DWORD* mouse_y = (DWORD*)((BYTE*)g_client + RVA_MOUSE_Y);
-    DWORD old_x = *mouse_x, old_y = *mouse_y;
-    *mouse_x = 0; *mouse_y = 0;
-    fClickMap(click_type, (DWORD)x, (DWORD)y, click_flags());
-    *mouse_x = old_x; *mouse_y = old_y;
-    a = 0; c = 0;
-    __asm__ volatile("call *%2" : "+a"(a), "+c"(c) : "r"(fSetSelectedUnit) : "edx", "memory", "cc");
+    click_ground(click_type, x, y);
     (void)button;
 }
 
