@@ -131,6 +131,9 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private void sendAttack(int phase) {
         GameState current = freshState();
         if (current == null) return;
+        if (targetId < 0 && (current.hoverId == 0xFFFFFFFFL || current.hoverType < 0)) {
+            chooseTarget(current);
+        }
         long id = targetId >= 0 ? targetId : current.hoverId;
         int type = targetId >= 0 ? targetType : current.hoverType;
         if (id < 0 || type < 0 || id == 0xFFFFFFFFL) return;
@@ -168,8 +171,20 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         if (candidates.isEmpty()) return;
         int currentIndex = -1;
         for (int i=0;i<candidates.size();i++) if (candidates.get(i).id == targetId) currentIndex=i;
-        int next = currentIndex < 0 ? 0 : Math.floorMod(currentIndex + (direction < 0 ? -1 : 1), candidates.size());
+        int next = currentIndex < 0
+                ? (direction < 0 ? candidates.size() - 1 : 0)
+                : Math.floorMod(currentIndex + (direction < 0 ? -1 : 1), candidates.size());
         Monster chosen = candidates.get(next);
+        targetId = chosen.id;
+        targetType = 1;
+        send(D2CommandPacket.highlight(1, chosen.id));
+    }
+
+    private void chooseTarget(GameState current) {
+        List<Monster> candidates = D2TargetSelector.rank(
+                current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) return;
+        Monster chosen = candidates.get(0);
         targetId = chosen.id;
         targetType = 1;
         send(D2CommandPacket.highlight(1, chosen.id));
