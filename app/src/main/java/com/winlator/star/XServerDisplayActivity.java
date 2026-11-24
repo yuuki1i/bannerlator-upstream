@@ -231,6 +231,15 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private com.winlator.star.cast.TsSegmenter castSegmenter;   // live HLS segmenter fed by the encoder
     private Runnable pendingCastStart; // (unused in live mode) cancelable delayed step
     private InputControlsView inputControlsView;
+    // Diablo II 1.13c touch runtime is attached only after a verified native module is live.
+    private com.winlator.star.d2android.D2ModUdpAdapter d2ModAdapter;
+    private com.winlator.star.d2android.D2CommandBridge d2CommandBridge;
+    private com.winlator.star.d2android.D2TouchOverlayView d2TouchOverlay;
+    private FrameLayout d2TouchRoot;
+    private final android.os.Handler d2TouchHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable d2TouchAttachPoll;
+
 
     // ---- Controller-status toast (P5b) — debounced hot-plug plumbing ----
     // Coalesce a burst of add/remove/change callbacks (fast replug, or a pad that fans out into
@@ -7796,6 +7805,11 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        d2TouchHandler.removeCallbacksAndMessages(null);
+        if (d2ModAdapter != null) { d2ModAdapter.close(); d2ModAdapter = null; }
+        d2TouchOverlay = null;
+        d2CommandBridge = null;
+        d2TouchRoot = null;
         sessionInForeground = false;
         if (accountGameSessionCounted) {
             accountGameSessionCounted = false;
@@ -12733,6 +12747,41 @@ public class XServerDisplayActivity extends AppCompatActivity {
         scriptFile.setExecutable(true);
     }
 
+    private boolean isD2CollectorShortcut() {
+        if (shortcut == null || !"game.exe".equalsIgnoreCase(getExecutable())) return false;
+        String args = shortcut.getExtra("execArgs");
+        if (args == null) return false;
+        String lower = args.toLowerCase(java.util.Locale.ROOT);
+        return lower.matches("(?s).*\\B-3dfx\\b.*")
+                && lower.matches("(?s).*\\B-direct\\b.*");
+    }
+
+    private void startD2TouchSession(FrameLayout root) {
+        if (!isD2CollectorShortcut()) return;
+        d2TouchRoot = root;
+        d2ModAdapter = new com.winlator.star.d2android.D2ModUdpAdapter();
+        d2ModAdapter.start();
+        // Keep the compatibility allowlist empty until the 1.13c native module has been verified.
+        d2CommandBridge = new com.winlator.star.d2android.D2CommandBridge(
+                d2ModAdapter,
+                new com.winlator.star.d2android.D2CompatibilityGate(java.util.Collections.emptySet()));
+        d2TouchAttachPoll = new Runnable() {
+            @Override public void run() {
+                if (d2ModAdapter == null || d2TouchRoot == null || isFinishing() || isDestroyed()) return;
+                if (d2CommandBridge != null && d2CommandBridge.isAvailable()) {
+                    if (d2TouchOverlay == null) {
+                        d2TouchOverlay = new com.winlator.star.d2android.D2TouchOverlayView(
+                                XServerDisplayActivity.this, d2CommandBridge);
+                        d2TouchOverlay.attachTo(d2TouchRoot);
+                    }
+                } else {
+                    d2TouchHandler.postDelayed(this, 500L);
+                }
+            }
+        };
+        d2TouchHandler.post(d2TouchAttachPoll);
+    }
+
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         // Seeded here (after the container + backend are resolved, and after the drawer's reset()
@@ -13254,6 +13303,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         inputControlsView.setXServer(xServer);
         inputControlsView.setVisibility(View.GONE);
         rootView.addView(inputControlsView);
+        startD2TouchSession(rootView);
         // Network games that stream: "Loading from NAS 34%" in the top-right corner while the game waits for files.
         com.winlator.star.netdrive.NetStreamTag.attach(this, rootView);
 
