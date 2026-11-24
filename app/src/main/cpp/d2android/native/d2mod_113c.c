@@ -402,8 +402,12 @@ static void process_command(const BYTE* p, unsigned length) {
         if (phase == PHASE_UP) {
             if (tap->active) click_ground(button==BUTTON_RIGHT?5u:2u,tap->x,tap->y);
             memset(tap,0,sizeof(*tap));
-        } else if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
+        } else if (phase == PHASE_DOWN) {
             if (!tap->active) click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            tap->active=1; tap->button=button; tap->x=x; tap->y=y; tap->expires=now_ms()+650;
+        } else if (phase == PHASE_HOLD) {
+            if (!tap->active) click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            else click_ground(button==BUTTON_RIGHT?4u:1u,x,y);
             tap->active=1; tap->button=button; tap->x=x; tap->y=y; tap->expires=now_ms()+650;
         } else if (phase == PHASE_CLICK) {
             click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
