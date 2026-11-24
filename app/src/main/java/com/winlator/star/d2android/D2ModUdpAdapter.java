@@ -144,7 +144,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         aimX = clamp(x); aimY = clamp(y);
         if (activeSkillSlot < 0 || strength < 0.12f) return;
         GameState current = freshState();
-        if (current == null) return;
+        if (current == null || !current.inGame) return;
         SkillBinding binding = skill(activeSkillSlot);
         int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                 : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
@@ -404,7 +404,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void cycleTarget(int direction) {
         GameState current = freshState();
-        if (current == null || current.monsters.isEmpty()) return;
+        if (current == null || !current.inGame || current.monsters.isEmpty()) return;
         List<Monster> candidates = D2TargetSelector.rank(current.monsters, current.playerX, current.playerY, aimX, aimY);
         if (candidates.isEmpty()) return;
         int currentIndex = -1;
