@@ -23,6 +23,7 @@ public final class D2CommandBridge {
         default void autoPickup() {}
         default void talk() {}
         default void sortInventory() {}
+        default void tap(float normalizedX, float normalizedY, boolean pressed) {}
     }
 
     private final GameAdapter adapter;
@@ -96,6 +97,13 @@ public final class D2CommandBridge {
     public boolean sortInventory() {
         if (!isAvailable()) return false;
         adapter.sortInventory();
+        return true;
+    }
+
+    public boolean tap(float normalizedX, float normalizedY, boolean pressed) {
+        if (!isAvailable()) return false;
+        adapter.tap(Math.max(0f,Math.min(1f,normalizedX)),
+                Math.max(0f,Math.min(1f,normalizedY)), pressed);
         return true;
     }
 
