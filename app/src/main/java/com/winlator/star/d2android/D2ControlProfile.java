@@ -67,7 +67,8 @@ public final class D2ControlProfile {
 
     public JSONObject toJson() throws JSONException {
         JSONObject root = new JSONObject().put("schema", 1).put("game", "diablo2-lod-1.13c")
-                .put("movement", movement.toJson()).put("attack", attack.toJson())\n                .put("skillPageToggle", skillPageToggle.toJson());
+                .put("movement", movement.toJson()).put("attack", attack.toJson())
+                .put("skillPageToggle", skillPageToggle.toJson());
         JSONArray array = new JSONArray();
         for (Element skill : skills) array.put(skill.toJson());
         return root.put("skills", array);
