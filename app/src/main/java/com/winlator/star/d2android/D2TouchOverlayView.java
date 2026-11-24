@@ -6,6 +6,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 /**
@@ -33,7 +34,7 @@ public final class D2TouchOverlayView extends View {
 
     /** Adds this overlay above the game surface; call from the owning game Activity. */
     public void attachTo(FrameLayout gameLayer) {
-        if (getParent() != null) ((FrameLayout)getParent()).removeView(this);
+        if (getParent() instanceof ViewGroup) ((ViewGroup)getParent()).removeView(this);
         gameLayer.addView(this, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
     }
@@ -90,7 +91,12 @@ public final class D2TouchOverlayView extends View {
             }
             return movePointer!=-1||attackPointer!=-1;
         }
-        if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_POINTER_UP||action==MotionEvent.ACTION_CANCEL) {
+        if(action==MotionEvent.ACTION_CANCEL) {
+            movePointer=-1; attackPointer=-1;
+            if(bridge!=null) { bridge.move(D2JoystickMath.Vector.zero()); bridge.attack(false); }
+            invalidate(); return true;
+        }
+        if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_POINTER_UP) {
             if(id==movePointer) { movePointer=-1; if(bridge!=null) bridge.move(D2JoystickMath.Vector.zero()); }
             if(id==attackPointer) { attackPointer=-1; if(bridge!=null) bridge.attack(false); }
             invalidate(); return true;
