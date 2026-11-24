@@ -28,7 +28,6 @@
 #define STATUS_FAILED 3
 
 #define CMD_UNIT 2
-#define CMD_HIGHLIGHT 3
 #define CMD_WALK 4
 #define CMD_TAKE 15
 #define CMD_KEY_PRESS 36
@@ -435,8 +434,7 @@ static void process_command(const BYTE* p, unsigned length) {
             click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
             click_ground(button==BUTTON_RIGHT?5u:2u,x,y);
         }
-    } else if (cmd == CMD_HIGHLIGHT && length >= 16) {
-        /* The Android target selector keeps the lock; the game cursor remains untouched here. */
+    }
 }
 
 static void process_commands(void) {
