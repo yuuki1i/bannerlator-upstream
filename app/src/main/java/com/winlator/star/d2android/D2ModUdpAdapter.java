@@ -68,6 +68,9 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile boolean walking, attackHeld;
     private volatile int targetType = -1;
     private volatile long targetId = -1;
+    private volatile int activeSkillSlot = -1;
+    private volatile long activeSkillTargetId = -1;
+    private volatile int activeSkillTargetType = -1;
     private ScheduledFuture<?> attackKeepAlive;
 
     public void start() {
@@ -106,6 +109,25 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void aim(float x, float y, float strength) {
         aimX = clamp(x); aimY = clamp(y);
+        if (activeSkillSlot < 0 || strength < 0.12f) return;
+        GameState current = freshState();
+        if (current == null) return;
+        List<Monster> candidates = D2TargetSelector.rank(
+                current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) return;
+        Monster chosen = candidates.get(0);
+        if (chosen.id == activeSkillTargetId) return;
+        SkillBinding binding = skill(activeSkillSlot);
+        if (binding == null) return;
+        if (activeSkillTargetId >= 0) {
+            send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                    D2CommandPacket.PHASE_UP, activeSkillTargetType, activeSkillTargetId));
+        }
+        activeSkillTargetId = chosen.id;
+        activeSkillTargetType = 1;
+        send(D2CommandPacket.highlight(1, chosen.id));
+        send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                D2CommandPacket.PHASE_DOWN, 1, chosen.id));
     }
 
     @Override public void attack(boolean pressed) {
@@ -156,26 +178,31 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         SkillBinding binding = skill(slot);
         if (binding == null) return;
         if (pressed) {
+            activeSkillSlot = slot;
             send(D2CommandPacket.selectSkill(binding.left, binding.id));
             GameState current = freshState();
-            if (current != null) {
-                long id = targetId >= 0 ? targetId : current.hoverId;
-                int type = targetId >= 0 ? targetType : current.hoverType;
-                if (id != 0xFFFFFFFFL && type >= 0) {
-                    send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                            D2CommandPacket.PHASE_DOWN, type, id));
-                }
+            if (current == null) return;
+            long id = targetId >= 0 ? targetId : current.hoverId;
+            int type = targetId >= 0 ? targetType : current.hoverType;
+            if (id == 0xFFFFFFFFL || type < 0) {
+                chooseTarget(current);
+                id = targetId;
+                type = targetType;
+            }
+            if (id >= 0 && id != 0xFFFFFFFFL && type >= 0) {
+                activeSkillTargetId = id;
+                activeSkillTargetType = type;
+                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                        D2CommandPacket.PHASE_DOWN, type, id));
             }
         } else {
-            GameState current = freshState();
-            if (current != null) {
-                long id = targetId >= 0 ? targetId : current.hoverId;
-                int type = targetId >= 0 ? targetType : current.hoverType;
-                if (id != 0xFFFFFFFFL && type >= 0) {
-                    send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                            D2CommandPacket.PHASE_UP, type, id));
-                }
+            if (activeSkillTargetId >= 0) {
+                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                        D2CommandPacket.PHASE_UP, activeSkillTargetType, activeSkillTargetId));
             }
+            activeSkillSlot = -1;
+            activeSkillTargetId = -1;
+            activeSkillTargetType = -1;
         }
     }
 
