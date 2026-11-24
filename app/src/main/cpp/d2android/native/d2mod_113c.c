@@ -53,6 +53,7 @@
 #define RVA_SET_SELECTED_UNIT 0x00051860
 #define RVA_GET_SELECTED_UNIT 0x00051A80
 #define RVA_GET_PLAYER_UNIT 0x000A4D60
+#define RVA_FIND_SERVER_SIDE_UNIT 0x000A5B40
 #define RVA_FIND_CLIENT_SIDE_UNIT 0x000A5B20
 #define RVA_MOUSE_Y 0x0011B824
 #define RVA_MOUSE_X 0x0011B828
@@ -81,11 +82,10 @@
 typedef struct UnitAny UnitAny;
 typedef UnitAny* (__stdcall *GetPlayerUnitFn)(void);
 typedef UnitAny* (__stdcall *GetSelectedUnitFn)(void);
-typedef UnitAny* (__fastcall *FindClientSideUnitFn)(DWORD id, DWORD type);
+typedef UnitAny* (__fastcall *FindUnitFn)(DWORD id, DWORD type);
 typedef int (__fastcall *GetUnitCoordFn)(UnitAny* unit);
-typedef int (__stdcall *GetMouseOffsetFn)(void);
+typedef DWORD (__fastcall *GetMouseOffsetFn)(void);
 typedef void (__stdcall *ClickMapFn)(DWORD clickType, DWORD x, DWORD y, DWORD flags);
-typedef void (__stdcall *SetSelectedUnitFn)(UnitAny* unit);
 typedef void (__stdcall *MapToAbsScreenFn)(int* x, int* y);
 
 typedef struct {
@@ -118,11 +118,11 @@ static DWORD g_last_state;
 
 static GetPlayerUnitFn fGetPlayerUnit;
 static GetSelectedUnitFn fGetSelectedUnit;
-static FindClientSideUnitFn fFindClientSideUnit;
+static FindUnitFn fFindServerSideUnit, fFindClientSideUnit;
 static GetUnitCoordFn fGetUnitX, fGetUnitY;
 static GetMouseOffsetFn fGetMouseXOffset, fGetMouseYOffset;
 static ClickMapFn fClickMap;
-static SetSelectedUnitFn fSetSelectedUnit;
+static DWORD fSetSelectedUnit;
 static MapToAbsScreenFn fMapToAbsScreen;
 
 static struct {
@@ -236,7 +236,8 @@ static int verify_installation(void) {
 
     fGetPlayerUnit = (GetPlayerUnitFn)((BYTE*)g_client + RVA_GET_PLAYER_UNIT);
     fGetSelectedUnit = (GetSelectedUnitFn)((BYTE*)g_client + RVA_GET_SELECTED_UNIT);
-    fFindClientSideUnit = (FindClientSideUnitFn)((BYTE*)g_client + RVA_FIND_CLIENT_SIDE_UNIT);
+    fFindServerSideUnit = (FindUnitFn)((BYTE*)g_client + RVA_FIND_SERVER_SIDE_UNIT);
+    fFindClientSideUnit = (FindUnitFn)((BYTE*)g_client + RVA_FIND_CLIENT_SIDE_UNIT);
     fGetUnitX = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_X);
     fGetUnitY = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_Y);
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
@@ -244,8 +245,9 @@ static int verify_installation(void) {
     fClickMap = (ClickMapFn)((BYTE*)g_client + RVA_CLICK_MAP);
     fSetSelectedUnit = (SetSelectedUnitFn)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
     fMapToAbsScreen = (MapToAbsScreenFn)GetProcAddress(g_common, (LPCSTR)11087);
-    if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindClientSideUnit || !fGetUnitX || !fGetUnitY
-            || !fGetMouseXOffset || !fGetMouseYOffset || !fClickMap || !fSetSelectedUnit || !fMapToAbsScreen)
+    if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindServerSideUnit || !fFindClientSideUnit
+            || !fGetUnitX || !fGetUnitY || !fGetMouseXOffset || !fGetMouseYOffset
+            || !fClickMap || !fSetSelectedUnit || !fMapToAbsScreen)
         return 0;
     _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=1.13c", g_game_hash, g_common_hash);
     return 1;
@@ -285,18 +287,21 @@ static void walk_point(int dx, int dy, int* x, int* y) {
 }
 
 static void click_unit(DWORD click_type, int button, DWORD type, DWORD id) {
-    UnitAny* unit = fFindClientSideUnit(id, type);
+    UnitAny* unit = fFindServerSideUnit(id, type);
+    if (!unit) unit = fFindClientSideUnit(id, type);
     if (!unit) return;
     int x, y;
     if (!unit_screen(unit, &x, &y)) return;
-    fSetSelectedUnit(unit);
+    DWORD a = (DWORD)(uintptr_t)unit, c = (DWORD)(uintptr_t)unit;
+    __asm__ volatile("call *%2" : "+a"(a), "+c"(c) : "r"(fSetSelectedUnit) : "edx", "memory", "cc");
     DWORD* mouse_x = (DWORD*)((BYTE*)g_client + RVA_MOUSE_X);
     DWORD* mouse_y = (DWORD*)((BYTE*)g_client + RVA_MOUSE_Y);
     DWORD old_x = *mouse_x, old_y = *mouse_y;
     *mouse_x = 0; *mouse_y = 0;
     fClickMap(click_type, (DWORD)x, (DWORD)y, click_flags());
     *mouse_x = old_x; *mouse_y = old_y;
-    fSetSelectedUnit(NULL);
+    a = 0; c = 0;
+    __asm__ volatile("call *%2" : "+a"(a), "+c"(c) : "r"(fSetSelectedUnit) : "edx", "memory", "cc");
     (void)button;
 }
 
