@@ -20,6 +20,8 @@ public final class D2CommandPacket {
     public static final int CMD_NPC = 8;
     public static final int CMD_SELECT_SKILL = 13;
     public static final int CMD_TAKE = 15;
+    public static final int CMD_SORT = 24;
+    public static final int CMD_KEY_PRESS = 36; // D2Android extension: native module synthesizes one guest key tap.
 
     public static final int BUTTON_LEFT = 0;
     public static final int BUTTON_RIGHT = 1;
@@ -63,6 +65,20 @@ public final class D2CommandPacket {
     public static byte[] take(int unitType, long unitId) {
         return command(CMD_TAKE, 8).put((byte) unitType).put((byte) 0).put((byte) 0).put((byte) 0)
                 .putInt((int) unitId).array();
+    }
+
+    public static byte[] take(int unitType, long unitId) {
+        return command(CMD_TAKE, 8).put((byte) unitType).put((byte) 0).put((byte) 0).put((byte) 0)
+                .putInt((int) unitId).array();
+    }
+
+    public static byte[] sortInventory(boolean charmsFixed) {
+        return command(CMD_SORT, 2).put((byte) 0).put((byte) (charmsFixed ? 1 : 0)).array();
+    }
+
+    public static byte[] keyPress(int virtualKey) {
+        if (virtualKey < 1 || virtualKey > 0xFF) throw new IllegalArgumentException("Invalid virtual key");
+        return command(CMD_KEY_PRESS, 1).put((byte) virtualKey).array();
     }
 
     public static byte[] portal() {
