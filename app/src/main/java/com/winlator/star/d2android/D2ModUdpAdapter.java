@@ -84,6 +84,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile long activeSkillTargetId = -1;
     private volatile int activeSkillTargetType = -1;
     private ScheduledFuture<?> attackKeepAlive;
+    private ScheduledFuture<?> skillKeepAlive;
 
     public void start() {
         synchronized (lock) {
@@ -223,7 +224,24 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                 activeSkillTargetType = type;
                 send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, type, id));
             }
+            synchronized (lock) {
+                if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+                skillKeepAlive = sender.scheduleAtFixedRate(() -> {
+                    int active = activeSkillSlot;
+                    long activeId = activeSkillTargetId;
+                    int activeType = activeSkillTargetType;
+                    if (active < 0 || activeId < 0 || activeType < 0) return;
+                    SkillBinding activeBinding = skill(active);
+                    int activeButton = activeBinding == null ? D2CommandPacket.BUTTON_RIGHT
+                            : (activeBinding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+                    send(D2CommandPacket.unit(activeButton, D2CommandPacket.PHASE_HOLD, activeType, activeId));
+                }, 180, 180, TimeUnit.MILLISECONDS);
+            }
         } else {
+            synchronized (lock) {
+                if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+                skillKeepAlive = null;
+            }
             if (activeSkillTargetId >= 0) {
                 send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
                         activeSkillTargetType, activeSkillTargetId));
@@ -440,6 +458,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void close() {
         if (walking) sendDirect(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+        if (activeSkillSlot >= 0 && activeSkillTargetId >= 0) {
+            SkillBinding binding = skill(activeSkillSlot);
+            int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                    : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+            sendDirect(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                    activeSkillTargetType, activeSkillTargetId));
+        }
         if (attackHeld) {
             GameState current = freshState();
             if (current != null) {
@@ -458,6 +483,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         synchronized (lock) {
             if (attackKeepAlive != null) attackKeepAlive.cancel(false);
             attackKeepAlive = null;
+            if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+            skillKeepAlive = null;
         }
         sender.shutdownNow();
     }
