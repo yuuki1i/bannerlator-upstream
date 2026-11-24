@@ -51,17 +51,23 @@ public final class D2ControlProfile {
     }
 
     public final Element movement = new Element(.12f, .76f, .23f, .23f, .72f, Shape.CIRCLE, "");
-    public final Element attack = new Element(.82f, .76f, .16f, .16f, .88f, Shape.CIRCLE, "");
+    public final Element attack = new Element(.88f, .82f, .12f, .12f, .88f, Shape.CIRCLE, "");
+    public final Element skillPageToggle = new Element(.90f, .55f, .07f, .07f, .78f, Shape.ROUNDED, "");
+    // Two independently persisted skill pages. Only four are visible at a time.
     public final Element[] skills = {
-            new Element(.66f, .82f, .10f, .10f, .82f, Shape.ROUNDED, ""),
-            new Element(.77f, .66f, .10f, .10f, .82f, Shape.ROUNDED, ""),
-            new Element(.88f, .56f, .10f, .10f, .82f, Shape.ROUNDED, ""),
-            new Element(.65f, .60f, .10f, .10f, .82f, Shape.ROUNDED, "")
+            new Element(.62f, .82f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.72f, .72f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.82f, .62f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.72f, .88f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.62f, .82f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.72f, .72f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.82f, .62f, .085f, .085f, .82f, Shape.ROUNDED, ""),
+            new Element(.72f, .88f, .085f, .085f, .82f, Shape.ROUNDED, "")
     };
 
     public JSONObject toJson() throws JSONException {
         JSONObject root = new JSONObject().put("schema", 1).put("game", "diablo2-lod-1.13c")
-                .put("movement", movement.toJson()).put("attack", attack.toJson());
+                .put("movement", movement.toJson()).put("attack", attack.toJson())\n                .put("skillPageToggle", skillPageToggle.toJson());
         JSONArray array = new JSONArray();
         for (Element skill : skills) array.put(skill.toJson());
         return root.put("skills", array);
