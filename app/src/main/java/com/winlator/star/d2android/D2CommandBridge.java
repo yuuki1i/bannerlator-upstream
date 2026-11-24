@@ -22,7 +22,6 @@ public final class D2CommandBridge {
         default void openPanel(int panel) {}
         default void autoPickup() {}
         default void talk() {}
-        default void sortInventory() {}
         default void tap(float normalizedX, float normalizedY, boolean pressed) {}
         default int nearbyItemCount() { return 0; }
     }
@@ -92,12 +91,6 @@ public final class D2CommandBridge {
     public boolean talk() {
         if (!isAvailable()) return false;
         adapter.talk();
-        return true;
-    }
-
-    public boolean sortInventory() {
-        if (!isAvailable()) return false;
-        adapter.sortInventory();
         return true;
     }
 
