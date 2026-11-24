@@ -317,6 +317,17 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         }
     }
 
+    @Override public int nearbyItemCount() {
+        GameState current = freshState();
+        if (current == null || !current.inGame) return 0;
+        int count = 0;
+        for (Thing item : current.items) {
+            double dx=item.x-current.playerX, dy=item.y-current.playerY;
+            if (dx*dx+dy*dy <= 240.0*240.0) count++;
+        }
+        return count;
+    }
+
     @Override public void talk() {
         GameState current = freshState();
         if (current == null || !current.inGame || current.hoverType != 1 || current.hoverId == 0xFFFFFFFFL) return;
