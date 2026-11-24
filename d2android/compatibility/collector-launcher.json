@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "edition": "Diablo II Collector's Edition",
+  "launcher": {
+    "exe": "启动游戏.exe",
+    "bat": "启动游戏.bat",
+    "batCommand": "start game.exe -3dfx -direct"
+  },
+  "androidWineShortcut": {
+    "target": "game.exe",
+    "arguments": "-3dfx -direct",
+    "workingDirectory": "directory containing launcher, game.exe, D2*.dll and MPQ files"
+  },
+  "reason": "The batch launcher explicitly starts game.exe with -3dfx -direct. On Wine/Android, register the Windows game executable and preserve its working directory and arguments; do not attempt to run the .bat file as a native Android command.",
+  "versionEvidence": {
+    "Game.exe": {
+      "fileVersion": "1, 0, 13, 60",
+      "productVersion": "1, 0, 13, 257",
+      "peTimestampUtc": "2010-03-09T04:10:51Z"
+    }
+  },
+  "nativeModStatus": "not-yet-implemented"
+}

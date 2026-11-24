@@ -1,0 +1,42 @@
+name: D2Android native 1.13c compile
+
+on:
+  push:
+    branches: [d2android-1.13c]
+    paths:
+      - 'app/src/main/cpp/d2android/**'
+      - 'app/src/main/cpp/bannerin/xinput/build.sh'
+      - '.github/workflows/d2android-native.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/src/main/cpp/d2android/**'
+      - 'app/src/main/cpp/bannerin/xinput/build.sh'
+      - '.github/workflows/d2android-native.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache pinned llvm-mingw
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/llvm-mingw-bylaws-20250920
+          key: llvm-mingw-bylaws-20250920-ubuntu-22.04-x86_64
+      - name: Restore pinned llvm-mingw
+        run: app/src/main/cpp/bannerin/xinput/build.sh toolchain
+      - name: Build XInput and D2Android i386 PE assets
+        run: app/src/main/cpp/bannerin/xinput/build.sh dlls /tmp/d2android-assets
+      - name: Verify D2Android artifacts
+        run: |
+          set -euo pipefail
+          file /tmp/d2android-assets/d2android/d2android_mod.dll | grep -q 'PE32'
+          file /tmp/d2android-assets/d2android/D2AndroidLauncher.exe | grep -q 'PE32'
+          strings /tmp/d2android-assets/d2android/d2android_mod.dll | grep -q 'D2Android-1.13c-native'
+          test -s /tmp/d2android-assets/d2android/d2android_mod.dll
+          test -s /tmp/d2android-assets/d2android/D2AndroidLauncher.exe
+          echo "D2Android 1.13c module and launcher compile successfully."

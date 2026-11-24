@@ -1,0 +1,664 @@
+package com.winlator.star.d2android;
+
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * UDP transport for the D2Android game-module protocol (D2AC commands / D2AM state).
+ * It only reports ready after the in-game module positively reports STATUS_HOOKED.
+ */
+public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoCloseable {
+    public static final int APP_PORT = 7958, MOD_PORT = 7959;
+    private static final int PROTOCOL_VERSION = 3;
+    private static final int STATUS_HOOKED = 1;
+    private static final long STATE_MAX_AGE_MS = 500;
+
+    public static final class Monster {
+        public final long id;
+        public final int x, y, hpPercent, flags;
+        public final String name;
+        Monster(long id, int x, int y, int hpPercent, int flags, String name) {
+            this.id=id; this.x=x; this.y=y; this.hpPercent=hpPercent; this.flags=flags; this.name=name;
+        }
+    }
+
+    public static final class Thing {
+        public final long id;
+        public final int x, y, kind, extra;
+        Thing(long id, int x, int y, int kind, int extra) {
+            this.id=id; this.x=x; this.y=y; this.kind=kind; this.extra=extra;
+        }
+    }
+
+    public static final class GameState {
+        public final int width, height, playerX, playerY, hoverType;
+        public final boolean inGame, inTown;
+        public final long hoverId;
+        public final List<Monster> monsters;
+        public final List<Thing> items, objects;
+        public final int[] hotkeySkills;
+        public final boolean[] hotkeyLeft;
+        public final long receivedAt;
+        GameState(int width, int height, int playerX, int playerY, int hoverType, boolean inGame, boolean inTown,
+                  long hoverId, List<Monster> monsters, List<Thing> items, List<Thing> objects,
+                  int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
+            this.width=width; this.height=height; this.playerX=playerX; this.playerY=playerY;
+            this.hoverType=hoverType; this.inGame=inGame; this.inTown=inTown; this.hoverId=hoverId;
+            this.monsters=Collections.unmodifiableList(monsters);
+            this.items=Collections.unmodifiableList(items);
+            this.objects=Collections.unmodifiableList(objects);
+            this.hotkeySkills=hotkeySkills; this.hotkeyLeft=hotkeyLeft; this.receivedAt=receivedAt;
+        }
+    }
+
+    private static final class SkillBinding {
+        final int id; final boolean left;
+        SkillBinding(int id, boolean left) { this.id=id; this.left=left; }
+    }
+
+    private final Object lock = new Object();
+    private final SkillBinding[] skills = new SkillBinding[16];
+    private final ScheduledExecutorService sender = Executors.newSingleThreadScheduledExecutor();
+    private volatile DatagramSocket socket;
+    private volatile Thread receiver;
+    private volatile int status = -1;
+    private volatile long lastPacketAt;
+    private volatile String statusText = "not connected";
+    private volatile GameState state;
+    private volatile float aimX, aimY;
+    private volatile boolean walking, attackHeld;
+    private volatile int walkX, walkY;
+    private volatile int targetType = -1;
+    private volatile long targetId = -1;
+    private volatile int activeSkillSlot = -1;
+    private volatile long activeSkillTargetId = -1;
+    private volatile int activeSkillTargetType = -1;
+    private volatile boolean groundSkillHeld;
+    private volatile boolean tapHeld;
+    private volatile int tapX, tapY;
+    private ScheduledFuture<?> walkKeepAlive;
+    private ScheduledFuture<?> attackKeepAlive;
+    private ScheduledFuture<?> skillKeepAlive;
+    private ScheduledFuture<?> tapKeepAlive;
+
+    public void start() {
+        synchronized (lock) {
+            if (receiver != null) return;
+            Thread t = new Thread(this::receiveLoop, "D2-mod-udp");
+            t.setDaemon(true);
+            receiver = t;
+            t.start();
+        }
+    }
+
+    public String getStatusText() { return statusText; }
+    public boolean isModuleHooked() {
+        return status == STATUS_HOOKED && statusText.contains("D2Android-1.13c-native");
+    }
+    public String getVerifiedGameSha256() {
+        int start = statusText.indexOf("game=");
+        if (start < 0) return "";
+        start += 5;
+        int end = statusText.indexOf(';', start);
+        if (end < 0) return "";
+        String hash = statusText.substring(start, end);
+        return hash.matches("(?i)[0-9a-f]{64}") ? hash.toLowerCase() : "";
+    }
+
+    public void setSkillBinding(int slot, int skillId, boolean left) {
+        if (slot < 0 || slot >= skills.length || skillId < 0 || skillId > 0xFFFF)
+            throw new IllegalArgumentException("Invalid skill binding");
+        synchronized (lock) { skills[slot] = skillId == 0 ? null : new SkillBinding(skillId, left); }
+    }
+
+    @Override public boolean isReadyFor(String buildId) {
+        return D2CompatibilityGate.TARGET_BUILD.equals(buildId)
+                && isModuleHooked() && lastPacketAt > 0
+                && System.currentTimeMillis() - lastPacketAt <= 2000;
+    }
+
+    @Override public void move(float x, float y, float strength) {
+        if (strength <= 0.001f) { stopWalking(); return; }
+        GameState currentState = freshState();
+        if (currentState == null || !currentState.inGame) return;
+        if (attackHeld) stopAttackForMovement();
+        stopLeftSkillForMovement();
+        int dx = Math.round(clamp(x) * 260f);
+        int dy = Math.round(clamp(y) * 260f);
+        int phase = walking ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN;
+        walkX=dx; walkY=dy; walking=true;
+        send(D2CommandPacket.walk(phase, dx, dy));
+        synchronized (lock) {
+            if (walkKeepAlive == null || walkKeepAlive.isCancelled() || walkKeepAlive.isDone()) {
+                walkKeepAlive = sender.scheduleAtFixedRate(() -> {
+                    if (walking) send(D2CommandPacket.walk(D2CommandPacket.PHASE_HOLD, walkX, walkY));
+                }, 180, 180, TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+
+    private void stopWalking() {
+        if (!walking) return;
+        walking = false;
+        synchronized (lock) {
+            if (walkKeepAlive != null) walkKeepAlive.cancel(false);
+            walkKeepAlive = null;
+        }
+        send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+    }
+
+    @Override public void aim(float x, float y, float strength) {
+        aimX = clamp(x); aimY = clamp(y);
+        if (activeSkillSlot < 0 || strength < 0.12f) return;
+        GameState current = freshState();
+        if (current == null || !current.inGame) return;
+        SkillBinding binding = skill(activeSkillSlot);
+        int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+        List<Monster> candidates = D2TargetSelector.rank(
+                current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) {
+            if (activeSkillTargetId >= 0) {
+                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
+                activeSkillTargetId = -1;
+                activeSkillTargetType = -1;
+            }
+            int dx=Math.round(aimX*260f), dy=Math.round(aimY*260f);
+            send(D2CommandPacket.groundSkill(button,
+                    groundSkillHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN, dx, dy));
+            groundSkillHeld = true;
+            return;
+        }
+        if (groundSkillHeld) {
+            send(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                    Math.round(aimX*260f), Math.round(aimY*260f)));
+            groundSkillHeld = false;
+        }
+        Monster chosen = candidates.get(0);
+        if (chosen.id == activeSkillTargetId) return;
+        if (activeSkillTargetId >= 0) {
+            send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                    activeSkillTargetType, activeSkillTargetId));
+        }
+        activeSkillTargetId = chosen.id;
+        activeSkillTargetType = 1;
+        send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, 1, chosen.id));
+    }
+
+    @Override public void attack(boolean pressed) {
+        if (pressed) {
+            if (walking) stopWalking();
+            stopLeftSkillForMovement();
+            attackHeld = true;
+            sendAttack(D2CommandPacket.PHASE_DOWN);
+            synchronized (lock) {
+                if (walkKeepAlive != null) walkKeepAlive.cancel(false);
+            walkKeepAlive = null;
+            if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+                attackKeepAlive = sender.scheduleAtFixedRate(
+                        () -> { if (attackHeld) sendAttack(D2CommandPacket.PHASE_HOLD); },
+                        180, 180, TimeUnit.MILLISECONDS);
+            }
+        } else {
+            attackHeld = false;
+            synchronized (lock) {
+                if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+                attackKeepAlive = null;
+            }
+            sendAttack(D2CommandPacket.PHASE_UP);
+        }
+    }
+
+    private void stopLeftSkillForMovement() {
+        if (activeSkillSlot < 0) return;
+        SkillBinding binding = skill(activeSkillSlot);
+        if (binding == null || !binding.left) return;
+        synchronized (lock) {
+            if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+            skillKeepAlive = null;
+        }
+        if (activeSkillTargetId >= 0)
+            send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP,
+                    activeSkillTargetType, activeSkillTargetId));
+        if (groundSkillHeld)
+            send(D2CommandPacket.groundSkill(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP,
+                    Math.round(aimX*260f), Math.round(aimY*260f)));
+        activeSkillSlot = -1;
+        activeSkillTargetId = -1;
+        activeSkillTargetType = -1;
+        groundSkillHeld = false;
+    }
+
+    private void stopAttackForMovement() {
+        attackHeld = false;
+        synchronized (lock) {
+            if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+            attackKeepAlive = null;
+        }
+        sendAttack(D2CommandPacket.PHASE_UP);
+    }
+
+    private void sendAttack(int phase) {
+        GameState current = freshState();
+        if (current == null || !current.inGame) return;
+        if (targetId >= 0) {
+            boolean stillVisible = false;
+            for (Monster monster : current.monsters) {
+                if (monster.id == targetId && monster.hpPercent > 0) { stillVisible = true; break; }
+            }
+            if (!stillVisible) { targetId = -1; targetType = -1; }
+        }
+        if (targetId < 0 && (current.hoverId == 0xFFFFFFFFL || current.hoverType < 0)) {
+            chooseTarget(current);
+        }
+        long id = targetId >= 0 ? targetId : current.hoverId;
+        int type = targetId >= 0 ? targetType : current.hoverType;
+        if (id < 0 || type < 0 || id == 0xFFFFFFFFL) return;
+        send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, phase, type, id));
+    }
+
+    @Override public void selectSkill(int slot) {
+        if (slot < 0 || slot > 7) return;
+        SkillBinding binding = skill(slot);
+        if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
+        else send(D2CommandPacket.keyPress(0x70 + slot)); // game-configured F1-F8 binding
+    }
+
+    @Override public void castSkill(int slot, boolean pressed) {
+        if (slot < 0 || slot > 7) return;
+        SkillBinding binding = skill(slot);
+        int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+        if (pressed) {
+            if (binding != null && binding.left) {
+                if (walking) stopWalking();
+                if (attackHeld) stopAttackForMovement();
+            }
+            activeSkillSlot = slot;
+            if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
+            else send(D2CommandPacket.keyPress(0x70 + slot));
+            GameState current = freshState();
+            if (current != null && current.inGame) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id == 0xFFFFFFFFL || type < 0) {
+                    chooseTarget(current);
+                    id = targetId;
+                    type = targetType;
+                }
+                if (id >= 0 && id != 0xFFFFFFFFL && type >= 0) {
+                    activeSkillTargetId = id;
+                    activeSkillTargetType = type;
+                    send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, type, id));
+                }
+            }
+            synchronized (lock) {
+                if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+                skillKeepAlive = sender.scheduleAtFixedRate(() -> {
+                    int active = activeSkillSlot;
+                    if (active < 0) return;
+                    SkillBinding activeBinding = skill(active);
+                    int activeButton = activeBinding == null ? D2CommandPacket.BUTTON_RIGHT
+                            : (activeBinding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+                    long activeId = activeSkillTargetId;
+                    int activeType = activeSkillTargetType;
+                    if (activeId >= 0 && activeType >= 0) {
+                        send(D2CommandPacket.unit(activeButton, D2CommandPacket.PHASE_HOLD, activeType, activeId));
+                    } else if (groundSkillHeld) {
+                        send(D2CommandPacket.groundSkill(activeButton, D2CommandPacket.PHASE_HOLD,
+                                Math.round(aimX*260f), Math.round(aimY*260f)));
+                    }
+                }, 180, 180, TimeUnit.MILLISECONDS);
+            }
+        } else {
+            synchronized (lock) {
+                if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+                skillKeepAlive = null;
+            }
+            if (activeSkillTargetId >= 0) {
+                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
+            }
+            if (groundSkillHeld) {
+                send(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                        Math.round(aimX*260f), Math.round(aimY*260f)));
+            }
+            activeSkillSlot = -1;
+            activeSkillTargetId = -1;
+            activeSkillTargetType = -1;
+            groundSkillHeld = false;
+        }
+    }
+
+    @Override public void openPanel(int panel) {
+        GameState current = freshState();
+        if (panel == 4) {
+            if (current == null || !current.inGame) return;
+            long stashId = -1;
+            if (current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL) {
+                for (Thing object : current.objects) {
+                    if (object.id == current.hoverId && object.kind == 267) { stashId=object.id; break; }
+                }
+            }
+            if (stashId < 0) {
+                Thing nearest = null;
+                double best = 400.0 * 400.0;
+                for (Thing object : current.objects) {
+                    if (object.kind != 267) continue; // D2ObjectTxt classId 267: town stash
+                    double dx=object.x-current.playerX, dy=object.y-current.playerY;
+                    double distance=dx*dx+dy*dy;
+                    if (distance < best) { best=distance; nearest=object; }
+                }
+                if (nearest != null) stashId = nearest.id;
+            }
+            if (stashId >= 0 && stashId != 0xFFFFFFFFL)
+                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK, 2, stashId));
+            return;
+        }
+        final int[] keys = {0x43, 0x54, 0x4F, 0x49};
+        if (panel >= 0 && panel < keys.length) send(D2CommandPacket.keyPress(keys[panel]));
+    }
+
+    @Override public void autoPickup() {
+        GameState current = freshState();
+        if (current == null || !current.inGame || current.items.isEmpty()) return;
+        List<Thing> remaining = new ArrayList<>(current.items);
+        for (int n=0; n<8 && !remaining.isEmpty(); n++) {
+            Thing nearest = null;
+            double best = 240.0 * 240.0;
+            for (Thing item : remaining) {
+                double dx=item.x-current.playerX, dy=item.y-current.playerY;
+                double distance=dx*dx+dy*dy;
+                if (distance < best) { best=distance; nearest=item; }
+            }
+            if (nearest == null) break;
+            send(D2CommandPacket.take(4, nearest.id));
+            remaining.remove(nearest);
+        }
+    }
+
+    @Override public boolean sortInventory(boolean charmsFixed) {
+        GameState current = freshState();
+        if (current == null || !current.inGame || !current.inTown) return false;
+        send(D2CommandPacket.sortInventory(charmsFixed));
+        return true;
+    }
+
+    @Override public int nearbyItemCount() {
+        GameState current = freshState();
+        if (current == null || !current.inGame) return 0;
+        int count = 0;
+        for (Thing item : current.items) {
+            double dx=item.x-current.playerX, dy=item.y-current.playerY;
+            if (dx*dx+dy*dy <= 240.0*240.0) count++;
+        }
+        return count;
+    }
+
+    @Override public void talk() {
+        GameState current = freshState();
+        if (current == null || !current.inGame) return;
+        Monster npc = null;
+        if (current.hoverType == 1 && current.hoverId != 0xFFFFFFFFL) {
+            for (Monster monster : current.monsters) {
+                if (monster.id == current.hoverId && (monster.flags & 16) != 0) { npc=monster; break; }
+            }
+        }
+        if (npc == null) {
+            double best = 360.0 * 360.0;
+            for (Monster monster : current.monsters) {
+                if ((monster.flags & 16) == 0) continue;
+                double dx=monster.x-current.playerX, dy=monster.y-current.playerY;
+                double distance=dx*dx+dy*dy;
+                if (distance < best) { best=distance; npc=monster; }
+            }
+        }
+        if (npc != null)
+            send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK, 1, npc.id));
+    }
+
+    @Override public void tap(float normalizedX, float normalizedY, boolean pressed) {
+        if (pressed) {
+            GameState current = freshState();
+            if (current == null) return;
+            tapX = Math.max(0, Math.min(current.width - 1, Math.round(normalizedX * current.width)));
+            tapY = Math.max(0, Math.min(current.height - 1, Math.round(normalizedY * current.height)));
+            boolean alreadyHeld = tapHeld;
+            tapHeld = true;
+            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                    alreadyHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN, tapX, tapY));
+            if (!alreadyHeld) {
+                synchronized (lock) {
+                    if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+                    tapKeepAlive = sender.scheduleAtFixedRate(() -> {
+                        if (tapHeld) send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                                D2CommandPacket.PHASE_HOLD, tapX, tapY));
+                    }, 180, 180, TimeUnit.MILLISECONDS);
+                }
+            }
+        } else if (tapHeld) {
+            tapHeld = false;
+            synchronized (lock) {
+                if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+                tapKeepAlive = null;
+            }
+            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP, tapX, tapY));
+        }
+    }
+
+    @Override public void cycleTarget(int direction) {
+        GameState current = freshState();
+        if (current == null || !current.inGame || current.monsters.isEmpty()) return;
+        List<Monster> candidates = D2TargetSelector.rank(current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) return;
+        int currentIndex = -1;
+        for (int i=0;i<candidates.size();i++) if (candidates.get(i).id == targetId) currentIndex=i;
+        int next = currentIndex < 0
+                ? (direction < 0 ? candidates.size() - 1 : 0)
+                : Math.floorMod(currentIndex + (direction < 0 ? -1 : 1), candidates.size());
+        Monster chosen = candidates.get(next);
+        targetId = chosen.id;
+        targetType = 1;
+    }
+
+    private void chooseTarget(GameState current) {
+        List<Monster> candidates = D2TargetSelector.rank(
+                current.monsters, current.playerX, current.playerY, aimX, aimY);
+        if (candidates.isEmpty()) return;
+        Monster chosen = candidates.get(0);
+        targetId = chosen.id;
+        targetType = 1;
+    }
+
+    private SkillBinding skill(int slot) {
+        if (slot < 0 || slot >= skills.length) return null;
+        synchronized (lock) { return skills[slot]; }
+    }
+
+    private GameState freshState() {
+        GameState current = state;
+        return current != null && System.currentTimeMillis() - current.receivedAt <= STATE_MAX_AGE_MS
+                ? current : null;
+    }
+
+    private void receiveLoop() {
+        DatagramSocket mine = null;
+        try (DatagramSocket s = new DatagramSocket(null)) {
+            mine = s;
+            s.setReuseAddress(true);
+            s.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), APP_PORT));
+            s.setSoTimeout(1000);
+            socket = s;
+            byte[] bytes = new byte[8192];
+            while (receiver == Thread.currentThread()) {
+                DatagramPacket packet = new DatagramPacket(bytes, bytes.length);
+                try { s.receive(packet); }
+                catch (SocketTimeoutException ignored) { continue; }
+                handlePacket(packet.getData(), packet.getLength());
+            }
+        } catch (IOException e) {
+            statusText = "UDP " + APP_PORT + ": " + e.getMessage();
+        } finally {
+            if (socket == mine) socket = null;
+        }
+    }
+
+    void handlePacket(byte[] data, int length) {
+        if (length < 8 || data[0] != 'D' || data[1] != '2' || data[2] != 'A' || data[3] != 'M'
+                || (data[4] & 0xFF) != PROTOCOL_VERSION) return;
+        lastPacketAt = System.currentTimeMillis();
+        int type = data[5] & 0xFF;
+        if (type == 1 && length >= 10) {
+            status = data[8] & 0xFF;
+            int n = Math.min(data[9] & 0xFF, length - 10);
+            statusText = new String(data, 10, n, StandardCharsets.UTF_8);
+        } else if (type == 2) {
+            GameState parsed = parseState(data, length);
+            if (parsed != null) {
+                state = parsed;
+                for (int i=0;i<8;i++) {
+                    int skillId = parsed.hotkeySkills[i];
+                    if (skillId > 0 && skillId < 0xFFFF) setSkillBinding(i, skillId, parsed.hotkeyLeft[i]);
+                }
+            }
+        }
+    }
+
+    static GameState parseState(byte[] data, int length) {
+        if (length < 59 || data[0] != 'D' || data[1] != '2' || data[2] != 'A' || data[3] != 'M'
+                || (data[4] & 0xFF) != PROTOCOL_VERSION || (data[5] & 0xFF) != 2) return null;
+        try {
+            ByteBuffer b = ByteBuffer.wrap(data, 0, length).order(ByteOrder.LITTLE_ENDIAN);
+            b.position(8);
+            int width=u16(b), height=u16(b);
+            b.getShort(); b.getShort(); // pointer
+            b.getInt(); b.getInt(); // UI flags
+            int levelNo=u16(b);
+            int inTown = u8(b); b.get(); // flags
+            boolean inGame = levelNo > 0;
+            int playerX=b.getShort(), playerY=b.getShort();
+            b.get(); b.get(); // life, mana
+            int hoverType=b.get() & 0xFF;
+            long hoverId=b.getInt() & 0xFFFFFFFFL;
+            b.get(); b.get(); // last drink, command count
+            b.position(b.position()+16); // belt
+            b.get(); // raw monster count
+            int count=b.get() & 0xFF;
+            if (count > 40) return null;
+            List<Monster> monsters=new ArrayList<>(count);
+            for (int i=0;i<count;i++) {
+                if (b.remaining()<11) return null;
+                long id=b.getInt() & 0xFFFFFFFFL;
+                int x=b.getShort(), y=b.getShort(), hp=b.get() & 0xFF, flags=b.get() & 0xFF;
+                int nameLength=b.get() & 0xFF;
+                if (nameLength>b.remaining()) return null;
+                byte[] name=new byte[nameLength]; b.get(name);
+                monsters.add(new Monster(id,x,y,hp,flags,new String(name,StandardCharsets.UTF_8)));
+            }
+            List<Thing> items=parseThings(b);
+            List<Thing> objects=parseThings(b);
+            int[] hotkeys = new int[16];
+            boolean[] left = new boolean[16];
+            java.util.Arrays.fill(hotkeys, -1);
+            if (b.hasRemaining()) {
+                b.get(); // character class
+                b.getShort(); b.getShort(); // current left/right skills
+                for (int i=0;i<16;i++) {
+                    if (b.remaining()<3) return null;
+                    int skill = b.getShort() & 0xFFFF;
+                    hotkeys[i] = skill == 0xFFFF ? -1 : skill;
+                    left[i] = (b.get() & 0xFF) != 0;
+                }
+            }
+            return new GameState(width,height,playerX,playerY,hoverType,inGame,inTown!=0,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
+        } catch (RuntimeException e) { return null; }
+    }
+
+    private static List<Thing> parseThings(ByteBuffer b) {
+        if (!b.hasRemaining()) throw new IllegalArgumentException("Missing unit list");
+        int count = b.get() & 0xFF;
+        if (count > 128 || b.remaining() < count * 11) throw new IllegalArgumentException("Invalid unit list");
+        List<Thing> result = new ArrayList<>(count);
+        for (int i=0;i<count;i++) {
+            long id=b.getInt() & 0xFFFFFFFFL;
+            int x=b.getShort(), y=b.getShort(), kind=b.getShort() & 0xFFFF, extra=b.get() & 0xFF;
+            result.add(new Thing(id,x,y,kind,extra));
+        }
+        return result;
+    }
+
+    private void send(byte[] bytes) {
+        final DatagramSocket s = socket;
+        if (s == null || bytes == null) return;
+        sender.execute(() -> {
+            try { s.send(new DatagramPacket(bytes, bytes.length, InetAddress.getByName("127.0.0.1"), MOD_PORT)); }
+            catch (IOException ignored) {}
+        });
+    }
+
+    private void sendDirect(byte[] bytes) {
+        DatagramSocket s = socket;
+        if (s == null || bytes == null) return;
+        try { s.send(new DatagramPacket(bytes, bytes.length, InetAddress.getByName("127.0.0.1"), MOD_PORT)); }
+        catch (IOException ignored) {}
+    }
+
+    private static float clamp(float v) { return Float.isFinite(v) ? Math.max(-1f, Math.min(1f, v)) : 0f; }
+
+    @Override public void close() {
+        if (walking) sendDirect(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+        if (tapHeld) sendDirect(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                D2CommandPacket.PHASE_UP, tapX, tapY));
+        if (activeSkillSlot >= 0) {
+            SkillBinding binding = skill(activeSkillSlot);
+            int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                    : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
+            if (activeSkillTargetId >= 0)
+                sendDirect(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
+            if (groundSkillHeld)
+                sendDirect(D2CommandPacket.groundSkill(button, D2CommandPacket.PHASE_UP,
+                        Math.round(aimX*260f), Math.round(aimY*260f)));
+        }
+        if (attackHeld) {
+            GameState current = freshState();
+            if (current != null) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id != 0xFFFFFFFFL && type >= 0)
+                    sendDirect(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT,
+                            D2CommandPacket.PHASE_UP, type, id));
+            }
+        }
+        receiver = null;
+        attackHeld = false;
+        walking = false;
+        tapHeld = false;
+        DatagramSocket s = socket;
+        if (s != null) s.close();
+        synchronized (lock) {
+            if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+            attackKeepAlive = null;
+            if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+            skillKeepAlive = null;
+            if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+            tapKeepAlive = null;
+        }
+        sender.shutdownNow();
+    }
+}

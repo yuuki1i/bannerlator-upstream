@@ -231,6 +231,16 @@ public class XServerDisplayActivity extends AppCompatActivity {
     private com.winlator.star.cast.TsSegmenter castSegmenter;   // live HLS segmenter fed by the encoder
     private Runnable pendingCastStart; // (unused in live mode) cancelable delayed step
     private InputControlsView inputControlsView;
+    // Diablo II 1.13c touch runtime is attached only after a verified native module is live.
+    private com.winlator.star.d2android.D2ModUdpAdapter d2ModAdapter;
+    private com.winlator.star.d2android.D2CommandBridge d2CommandBridge;
+    private com.winlator.star.d2android.D2CompatibilityGate d2CompatibilityGate;
+    private com.winlator.star.d2android.D2TouchOverlayView d2TouchOverlay;
+    private FrameLayout d2TouchRoot;
+    private final android.os.Handler d2TouchHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable d2TouchAttachPoll;
+
 
     // ---- Controller-status toast (P5b) — debounced hot-plug plumbing ----
     // Coalesce a burst of add/remove/change callbacks (fast replug, or a pad that fans out into
@@ -7796,6 +7806,12 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        d2TouchHandler.removeCallbacksAndMessages(null);
+        if (d2ModAdapter != null) { d2ModAdapter.close(); d2ModAdapter = null; }
+        d2TouchOverlay = null;
+        d2CommandBridge = null;
+        d2CompatibilityGate = null;
+        d2TouchRoot = null;
         sessionInForeground = false;
         if (accountGameSessionCounted) {
             accountGameSessionCounted = false;
@@ -12733,6 +12749,78 @@ public class XServerDisplayActivity extends AppCompatActivity {
         scriptFile.setExecutable(true);
     }
 
+    private boolean isD2CollectorShortcut() {
+        if (shortcut == null) return false;
+        String executable = getExecutable();
+        if (executable == null) return false;
+        if (D2LauncherProfile.LAUNCHER_EXE.equalsIgnoreCase(executable)
+                || D2LauncherProfile.LAUNCHER_BAT.equalsIgnoreCase(executable)) return true;
+        if (!"game.exe".equalsIgnoreCase(executable)) return false;
+        String args = shortcut.getExtra("execArgs");
+        if (args == null) return false;
+        String lower = args.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("-3dfx") && lower.contains("-direct");
+    }
+
+    private File resolveD2GameDirectory() {
+        if (shortcut == null || container == null || shortcut.path == null) return null;
+        String winPath = shortcut.path.replace('\\\\', '/');
+        if (winPath.length() < 3 || winPath.charAt(1) != ':') return null;
+        char drive = Character.toLowerCase(winPath.charAt(0));
+        File driveRoot;
+        if (drive == 'z') {
+            driveRoot = imageFs != null ? imageFs.getRootDir() : null;
+        } else if (drive == 'c') {
+            driveRoot = new File(container.getRootDir(), "drive_c");
+        } else {
+            return null;
+        }
+        if (driveRoot == null) return null;
+        File executable = new File(driveRoot, winPath.substring(3));
+        return executable.getParentFile();
+    }
+
+    private boolean ensureD2RuntimeFiles() {
+        File gameDir = resolveD2GameDirectory();
+        if (gameDir == null || !new File(gameDir, "game.exe").isFile()) return false;
+        File launcher = new File(gameDir, "D2AndroidLauncher.exe");
+        File module = new File(gameDir, "d2android_mod.dll");
+        com.winlator.star.core.FileUtils.copy(this,
+                "bannerin-xinput/d2android/D2AndroidLauncher.exe", launcher);
+        com.winlator.star.core.FileUtils.copy(this,
+                "bannerin-xinput/d2android/d2android_mod.dll", module);
+        return launcher.isFile() && launcher.length() > 0 && module.isFile() && module.length() > 0;
+    }
+
+    private void startD2TouchSession(FrameLayout root) {
+        if (!isD2CollectorShortcut()) return;
+        d2TouchRoot = root;
+        d2ModAdapter = new com.winlator.star.d2android.D2ModUdpAdapter();
+        d2ModAdapter.start();
+        d2CompatibilityGate = new com.winlator.star.d2android.D2CompatibilityGate(
+                java.util.Collections.singleton(
+                        com.winlator.star.d2android.D2CompatibilityGate.APPROVED_GAME_SHA256));
+        d2CommandBridge = new com.winlator.star.d2android.D2CommandBridge(d2ModAdapter, d2CompatibilityGate);
+        d2TouchAttachPoll = new Runnable() {
+            @Override public void run() {
+                if (d2ModAdapter == null || d2TouchRoot == null || isFinishing() || isDestroyed()) return;
+                if (d2ModAdapter.isModuleHooked()) {
+                    d2CompatibilityGate.verifyExecutableSha256(d2ModAdapter.getVerifiedGameSha256());
+                }
+                if (d2CommandBridge != null && d2CommandBridge.isAvailable()) {
+                    if (d2TouchOverlay == null) {
+                        d2TouchOverlay = new com.winlator.star.d2android.D2TouchOverlayView(
+                                XServerDisplayActivity.this, d2CommandBridge);
+                        d2TouchOverlay.attachTo(d2TouchRoot);
+                    }
+                } else {
+                    d2TouchHandler.postDelayed(this, 500L);
+                }
+            }
+        };
+        d2TouchHandler.post(d2TouchAttachPoll);
+    }
+
     private void setupUI() {
         FrameLayout rootView = findViewById(R.id.FLXServerDisplay);
         // Seeded here (after the container + backend are resolved, and after the drawer's reset()
@@ -13254,6 +13342,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         inputControlsView.setXServer(xServer);
         inputControlsView.setVisibility(View.GONE);
         rootView.addView(inputControlsView);
+        startD2TouchSession(rootView);
         // Network games that stream: "Loading from NAS 34%" in the top-right corner while the game waits for files.
         com.winlator.star.netdrive.NetStreamTag.attach(this, rootView);
 
@@ -16442,7 +16531,11 @@ return true;
         }
 
         if (shortcut != null) {
+            boolean d2CollectorShortcut = isD2CollectorShortcut();
+            boolean d2LauncherReady = d2CollectorShortcut && ensureD2RuntimeFiles();
             String execArgs = shortcut.getExtra("execArgs");
+            if (d2CollectorShortcut) execArgs = D2LauncherProfile.ARGUMENTS;
+            if (execArgs == null) execArgs = "";
             // Windows Steam with GPU drawing: Steam's -cef-disable-gpu is left out (see windowsSteamGpuDrawing).
             if (windowsSteamSession && windowsSteamGpuDrawing())
                 execArgs = com.winlator.star.store.WindowsSteamClient.withoutCefDisableGpu(execArgs);
@@ -16478,6 +16571,8 @@ return true;
                 // existing shortcut works and a stale loader shortcut is repaired). Same folder → /dir holds.
                 String goldbergName = resolveGoldbergLaunchName(filename);
                 if (goldbergName != null) filename = goldbergName;
+                if (d2CollectorShortcut)
+                filename = d2LauncherReady ? "D2AndroidLauncher.exe" : D2LauncherProfile.TARGET_EXE;
 
                 args += "/dir " + StringUtils.escapeDOSPath(exeDir) + " \"" + filename + "\"" + execArgs;
             }

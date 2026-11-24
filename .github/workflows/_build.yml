@@ -53,11 +53,9 @@ jobs:
     strategy:
       fail-fast: false          # one flavor failing must NOT cancel the others
       matrix:
+        # Only build the Standard APK for the Diablo II integration test.
         flavor:
           - { id: standard, task: assembleStandardRelease }
-          - { id: ludashi,  task: assembleLudashiRelease  }
-          - { id: pubg,     task: assemblePubgRelease     }
-          - { id: antutu,   task: assembleAntutuRelease   }
 
     name: build (${{ matrix.flavor.id }})
 
