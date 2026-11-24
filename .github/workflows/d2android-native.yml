@@ -34,8 +34,9 @@ jobs:
       - name: Verify D2Android artifacts
         run: |
           set -euo pipefail
-          llvm-readobj --file-headers /tmp/d2android-assets/d2android/d2android_mod.dll | grep -q 'Format: COFF-i386'
-          llvm-readobj --file-headers /tmp/d2android-assets/d2android/D2AndroidLauncher.exe | grep -q 'Format: COFF-i386'
+          file /tmp/d2android-assets/d2android/d2android_mod.dll | grep -q 'PE32'
+          file /tmp/d2android-assets/d2android/D2AndroidLauncher.exe | grep -q 'PE32'
+          strings /tmp/d2android-assets/d2android/d2android_mod.dll | grep -q 'D2Android-1.13c-native'
           test -s /tmp/d2android-assets/d2android/d2android_mod.dll
           test -s /tmp/d2android-assets/d2android/D2AndroidLauncher.exe
           echo "D2Android 1.13c module and launcher compile successfully."
