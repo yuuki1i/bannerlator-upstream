@@ -272,6 +272,8 @@ static int verify_installation(void) {
     fGetSelectedUnit = (GetSelectedUnitFn)((BYTE*)g_client + RVA_GET_SELECTED_UNIT);
     fFindServerSideUnit = (FindUnitFn)((BYTE*)g_client + RVA_FIND_SERVER_SIDE_UNIT);
     fFindClientSideUnit = (FindUnitFn)((BYTE*)g_client + RVA_FIND_CLIENT_SIDE_UNIT);
+    fClickMap = (ClickMapFn)((BYTE*)g_client + RVA_CLICK_MAP);
+    fSetSelectedUnit = (SetSelectedUnitFn)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
     fGetUnitX = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_X);
     fGetUnitY = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_Y);
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
@@ -279,7 +281,7 @@ static int verify_installation(void) {
     fMapToAbsScreen = (MapToAbsScreenFn)GetProcAddress(g_common, (LPCSTR)11087);
     if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindServerSideUnit || !fFindClientSideUnit
             || !fGetUnitX || !fGetUnitY || !fGetMouseXOffset || !fGetMouseYOffset
-            || !fMapToAbsScreen)
+            || !fMapToAbsScreen || !fClickMap || !fSetSelectedUnit)
         return 0;
     _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=%s",
               g_game_hash, g_common_hash, client_blob);
