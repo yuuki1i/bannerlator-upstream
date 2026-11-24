@@ -31,7 +31,6 @@
 #define CMD_HIGHLIGHT 3
 #define CMD_WALK 4
 #define CMD_TAKE 15
-#define CMD_SORT 24
 #define CMD_KEY_PRESS 36
 #define CMD_GROUND_SKILL 37
 #define CMD_TAP 38
@@ -438,9 +437,6 @@ static void process_command(const BYTE* p, unsigned length) {
         }
     } else if (cmd == CMD_HIGHLIGHT && length >= 16) {
         /* The Android target selector keeps the lock; the game cursor remains untouched here. */
-    } else if (cmd == CMD_SORT) {
-        /* Sorting is gated in the Android UI until the 1.13c inventory-grid routine is ported. */
-    }
 }
 
 static void process_commands(void) {
