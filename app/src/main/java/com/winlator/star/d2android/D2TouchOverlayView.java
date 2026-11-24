@@ -8,6 +8,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 /**
  * Diablo II touch surface. Movement, attack and skill gestures own independent pointer IDs,
@@ -110,7 +111,7 @@ public final class D2TouchOverlayView extends View {
     }
 
     private static final String[] MENU_LABELS = {
-            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "编辑布局"
+            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "编辑布局", "整理背包"
     };
 
     private RectF pickupHintBounds() {
@@ -134,7 +135,9 @@ public final class D2TouchOverlayView extends View {
 
     private RectF menuBounds(int index) {
         float density = getResources().getDisplayMetrics().density;
-        float rowHeight = 42f * density, panelWidth = 172f * density;
+        float rowHeight = Math.min(42f * density, Math.max(30f * density,
+                (getHeight() - 28f * density) / MENU_LABELS.length));
+        float panelWidth = 172f * density;
         float left = Math.max(8f * density, getWidth() - panelWidth - 12f * density);
         float top = 12f * density + index * rowHeight;
         return new RectF(left, top, left + panelWidth, top + rowHeight - 3f * density);
@@ -165,7 +168,13 @@ public final class D2TouchOverlayView extends View {
             if (index <= 4) bridge.openPanel(index);
             else if (index == 5) bridge.autoPickup();
             else if (index == 6) bridge.talk();
-
+            else if (index == 7) setEditing(true);
+            else if (index == 8) {
+                if (bridge.sortInventory(true))
+                    Toast.makeText(getContext(), "已发送整理指令（仅离线单人城镇有效）", Toast.LENGTH_SHORT).show();
+                else
+                    Toast.makeText(getContext(), "请在城镇打开背包后使用整理功能", Toast.LENGTH_SHORT).show();
+            }
         }
         menuOpen = false;
         invalidate();
