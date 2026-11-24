@@ -85,6 +85,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile long activeSkillTargetId = -1;
     private volatile int activeSkillTargetType = -1;
     private volatile boolean groundSkillHeld;
+    private volatile boolean tapHeld;
+    private volatile int tapX, tapY;
     private ScheduledFuture<?> attackKeepAlive;
     private ScheduledFuture<?> skillKeepAlive;
 
@@ -328,6 +330,21 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         send(D2CommandPacket.sortInventory(false));
     }
 
+    @Override public void tap(float normalizedX, float normalizedY, boolean pressed) {
+        if (pressed) {
+            GameState current = freshState();
+            if (current == null) return;
+            tapX = Math.max(0, Math.min(current.width - 1, Math.round(normalizedX * current.width)));
+            tapY = Math.max(0, Math.min(current.height - 1, Math.round(normalizedY * current.height)));
+            int phase = tapHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN;
+            tapHeld = true;
+            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT, phase, tapX, tapY));
+        } else if (tapHeld) {
+            tapHeld = false;
+            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP, tapX, tapY));
+        }
+    }
+
     @Override public void cycleTarget(int direction) {
         GameState current = freshState();
         if (current == null || current.monsters.isEmpty()) return;
@@ -489,6 +506,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void close() {
         if (walking) sendDirect(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+        if (tapHeld) sendDirect(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                D2CommandPacket.PHASE_UP, tapX, tapY));
         if (activeSkillSlot >= 0) {
             SkillBinding binding = skill(activeSkillSlot);
             int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
@@ -513,6 +532,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         receiver = null;
         attackHeld = false;
         walking = false;
+        tapHeld = false;
         DatagramSocket s = socket;
         if (s != null) s.close();
         synchronized (lock) {
