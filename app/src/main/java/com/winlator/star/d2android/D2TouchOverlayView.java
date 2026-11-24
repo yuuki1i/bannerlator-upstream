@@ -152,7 +152,7 @@ public final class D2TouchOverlayView extends View {
 
     private RectF editorButtonBounds(int index) {
         float d = getResources().getDisplayMetrics().density;
-        float buttonWidth = 54f*d, gap = 5f*d, total = 5*buttonWidth + 4*gap;
+        float buttonWidth = 52f*d, gap = 4f*d, total = 6*buttonWidth + 5*gap;
         float left = (getWidth() - total) * .5f;
         float top = getHeight() - 58f*d;
         return new RectF(left + index*(buttonWidth+gap), top,
@@ -163,11 +163,11 @@ public final class D2TouchOverlayView extends View {
         float d = getResources().getDisplayMetrics().density;
         RectF panel = new RectF(editorButtonBounds(0).left - 6f*d,
                 editorButtonBounds(0).top - 6f*d,
-                editorButtonBounds(4).right + 6f*d,
+                editorButtonBounds(5).right + 6f*d,
                 editorButtonBounds(4).bottom + 6f*d);
         paint.setColor(0xE6222630);
         canvas.drawRoundRect(panel, 10f*d, 10f*d, paint);
-        String[] labels = {"大小+", "大小-", "透明+", "透明-", "形状"};
+        String[] labels = {"大小+", "大小-", "透明+", "透明-", "形状", "贴图"};
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTextSize(12f*d);
         for (int i=0;i<labels.length;i++) {
@@ -196,9 +196,14 @@ public final class D2TouchOverlayView extends View {
             x=Math.min(x,1f-w); y=Math.min(y,1f-h);
         } else if (action == 2) opacity=Math.min(1f,opacity+.05f);
         else if (action == 3) opacity=Math.max(.1f,opacity-.05f);
-        else {
+        else if (action == 4) {
             D2ControlProfile.Shape[] shapes=D2ControlProfile.Shape.values();
             shape=shapes[(shape.ordinal()+1)%shapes.length];
+        } else {
+            String[] textures={"default","stone","ember","ice","gold"};
+            int current=0;
+            for(int i=0;i<textures.length;i++) if(textures[i].equals(e.texture)) current=i;
+            e.texture=textures[(current+1)%textures.length];
         }
         e.set(x,y,w,h,opacity,shape,e.texture);
         store.save(profile);
@@ -215,12 +220,29 @@ public final class D2TouchOverlayView extends View {
 
     private void drawElement(Canvas canvas, D2ControlProfile.Element element, String label) {
         RectF rect = bounds(element);
-        paint.setColor((Math.round(element.opacity * 255f) << 24) | 0x003B4355);
+        int textureColor = 0x003B4355;
+        if ("stone".equals(element.texture)) textureColor = 0x005C5548;
+        else if ("ember".equals(element.texture)) textureColor = 0x006B3828;
+        else if ("ice".equals(element.texture)) textureColor = 0x002B6074;
+        else if ("gold".equals(element.texture)) textureColor = 0x006B5725;
+        int alpha = Math.round(element.opacity * 255f);
+        paint.setColor((alpha << 24) | textureColor);
         paint.setStyle(Paint.Style.FILL);
         if (element.shape == D2ControlProfile.Shape.CIRCLE) canvas.drawOval(rect, paint);
         else if (element.shape == D2ControlProfile.Shape.SQUARE) canvas.drawRect(rect, paint);
         else canvas.drawRoundRect(rect, Math.min(rect.width(), rect.height()) * .18f,
                 Math.min(rect.width(), rect.height()) * .18f, paint);
+        if (element.shape == D2ControlProfile.Shape.TEXTURE) {
+            canvas.save();
+            canvas.clipRect(rect);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, rect.width() * .012f));
+            paint.setColor((Math.min(150, alpha) << 24) | 0x00FFFFFF);
+            for (float x=rect.left-rect.height(); x<rect.right; x+=Math.max(5f,rect.width()*.12f))
+                canvas.drawLine(x,rect.bottom,x+rect.height(),rect.top,paint);
+            paint.setStyle(Paint.Style.FILL);
+            canvas.restore();
+        }
         paint.setColor(0xEFFFFFFF);
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setTextSize(Math.max(12f, rect.height() * .22f));
@@ -341,7 +363,7 @@ public final class D2TouchOverlayView extends View {
     private boolean handleEditingTouch(MotionEvent event, int action, int id, float x, float y) {
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
             if (editorDoneBounds().contains(x,y)) { setEditing(false); return true; }
-            for (int i=0;i<5;i++) {
+            for (int i=0;i<6;i++) {
                 if (editorButtonBounds(i).contains(x,y)) { adjustSelectedElement(i); return true; }
             }
             if (editPointer != -1) return true;
