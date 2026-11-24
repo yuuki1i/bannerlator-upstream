@@ -100,7 +100,7 @@ public final class D2TouchOverlayView extends View {
     }
 
     private static final String[] MENU_LABELS = {
-            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "整理背包"
+            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话"
     };
 
     private RectF menuBounds(int index) {
@@ -136,7 +136,7 @@ public final class D2TouchOverlayView extends View {
             if (index <= 4) bridge.openPanel(index);
             else if (index == 5) bridge.autoPickup();
             else if (index == 6) bridge.talk();
-            else if (index == 7) bridge.sortInventory();
+
         }
         menuOpen = false;
         invalidate();
