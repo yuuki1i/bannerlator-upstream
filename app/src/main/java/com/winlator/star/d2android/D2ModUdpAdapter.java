@@ -74,6 +74,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile DatagramSocket socket;
     private volatile Thread receiver;
     private volatile int status = -1;
+    private volatile long lastPacketAt;
     private volatile String statusText = "not connected";
     private volatile GameState state;
     private volatile float aimX, aimY;
@@ -117,13 +118,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     @Override public boolean isReadyFor(String buildId) {
-        GameState current = state;
         return D2CompatibilityGate.TARGET_BUILD.equals(buildId)
-                && status == STATUS_HOOKED && current != null
-                && System.currentTimeMillis() - current.receivedAt <= STATE_MAX_AGE_MS;
+                && isModuleHooked() && lastPacketAt > 0
+                && System.currentTimeMillis() - lastPacketAt <= 2000;
     }
 
     @Override public void move(float x, float y, float strength) {
+        if (strength > 0.001f && freshState() == null) return;
         int dx = Math.round(clamp(x) * 260f);
         int dy = Math.round(clamp(y) * 260f);
         int phase = strength <= 0.001f ? D2CommandPacket.PHASE_UP
@@ -211,18 +212,19 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
             else send(D2CommandPacket.keyPress(0x70 + slot));
             GameState current = freshState();
-            if (current == null) return;
-            long id = targetId >= 0 ? targetId : current.hoverId;
-            int type = targetId >= 0 ? targetType : current.hoverType;
-            if (id == 0xFFFFFFFFL || type < 0) {
-                chooseTarget(current);
-                id = targetId;
-                type = targetType;
-            }
-            if (id >= 0 && id != 0xFFFFFFFFL && type >= 0) {
-                activeSkillTargetId = id;
-                activeSkillTargetType = type;
-                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, type, id));
+            if (current != null) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id == 0xFFFFFFFFL || type < 0) {
+                    chooseTarget(current);
+                    id = targetId;
+                    type = targetType;
+                }
+                if (id >= 0 && id != 0xFFFFFFFFL && type >= 0) {
+                    activeSkillTargetId = id;
+                    activeSkillTargetType = type;
+                    send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, type, id));
+                }
             }
             synchronized (lock) {
                 if (skillKeepAlive != null) skillKeepAlive.cancel(false);
@@ -360,6 +362,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     void handlePacket(byte[] data, int length) {
         if (length < 8 || data[0] != 'D' || data[1] != '2' || data[2] != 'A' || data[3] != 'M'
                 || (data[4] & 0xFF) != 2) return;
+        lastPacketAt = System.currentTimeMillis();
         int type = data[5] & 0xFF;
         if (type == 1 && length >= 10) {
             status = data[8] & 0xFF;
