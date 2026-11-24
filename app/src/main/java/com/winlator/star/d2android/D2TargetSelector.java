@@ -13,7 +13,7 @@ public final class D2TargetSelector {
         List<Scored> scored = new ArrayList<>();
         double aimLength = Math.hypot(aimX, aimY);
         for (D2ModUdpAdapter.Monster monster : monsters) {
-            if (monster == null || monster.hpPercent <= 0 || monster.id == 0xFFFFFFFFL) continue;
+            if (monster == null || monster.hpPercent <= 0 || (monster.flags & 16) != 0 || monster.id == 0xFFFFFFFFL) continue;
             double dx = monster.x - originX, dy = monster.y - originY;
             double distance = Math.hypot(dx, dy);
             if (distance < 1) continue;
