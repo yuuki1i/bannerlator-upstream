@@ -249,14 +249,19 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     @Override public void autoPickup() {
         GameState current = freshState();
         if (current == null || current.items.isEmpty()) return;
-        Thing nearest = null;
-        double best = 240.0 * 240.0;
-        for (Thing item : current.items) {
-            double dx=item.x-current.playerX, dy=item.y-current.playerY;
-            double distance=dx*dx+dy*dy;
-            if (distance < best) { best=distance; nearest=item; }
+        List<Thing> remaining = new ArrayList<>(current.items);
+        for (int n=0; n<8 && !remaining.isEmpty(); n++) {
+            Thing nearest = null;
+            double best = 240.0 * 240.0;
+            for (Thing item : remaining) {
+                double dx=item.x-current.playerX, dy=item.y-current.playerY;
+                double distance=dx*dx+dy*dy;
+                if (distance < best) { best=distance; nearest=item; }
+            }
+            if (nearest == null) break;
+            send(D2CommandPacket.take(4, nearest.id));
+            remaining.remove(nearest);
         }
-        if (nearest != null) send(D2CommandPacket.take(4, nearest.id));
     }
 
     @Override public void talk() {
