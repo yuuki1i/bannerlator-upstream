@@ -81,6 +81,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile GameState state;
     private volatile float aimX, aimY;
     private volatile boolean walking, attackHeld;
+    private volatile int walkX, walkY;
     private volatile int targetType = -1;
     private volatile long targetId = -1;
     private volatile int activeSkillSlot = -1;
@@ -89,6 +90,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile boolean groundSkillHeld;
     private volatile boolean tapHeld;
     private volatile int tapX, tapY;
+    private ScheduledFuture<?> walkKeepAlive;
     private ScheduledFuture<?> attackKeepAlive;
     private ScheduledFuture<?> skillKeepAlive;
     private ScheduledFuture<?> tapKeepAlive;
@@ -130,15 +132,32 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     @Override public void move(float x, float y, float strength) {
+        if (strength <= 0.001f) { stopWalking(); return; }
         GameState currentState = freshState();
-        if (strength > 0.001f && (currentState == null || !currentState.inGame)) return;
-        if (strength > 0.001f && attackHeld) stopAttackForMovement();
+        if (currentState == null || !currentState.inGame) return;
+        if (attackHeld) stopAttackForMovement();
         int dx = Math.round(clamp(x) * 260f);
         int dy = Math.round(clamp(y) * 260f);
-        int phase = strength <= 0.001f ? D2CommandPacket.PHASE_UP
-                : (walking ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN);
-        walking = phase != D2CommandPacket.PHASE_UP;
+        int phase = walking ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN;
+        walkX=dx; walkY=dy; walking=true;
         send(D2CommandPacket.walk(phase, dx, dy));
+        synchronized (lock) {
+            if (walkKeepAlive == null || walkKeepAlive.isCancelled() || walkKeepAlive.isDone()) {
+                walkKeepAlive = sender.scheduleAtFixedRate(() -> {
+                    if (walking) send(D2CommandPacket.walk(D2CommandPacket.PHASE_HOLD, walkX, walkY));
+                }, 180, 180, TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+
+    private void stopWalking() {
+        if (!walking) return;
+        walking = false;
+        synchronized (lock) {
+            if (walkKeepAlive != null) walkKeepAlive.cancel(false);
+            walkKeepAlive = null;
+        }
+        send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
     }
 
     @Override public void aim(float x, float y, float strength) {
@@ -182,14 +201,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void attack(boolean pressed) {
         if (pressed) {
-            if (walking) {
-                walking = false;
-                send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
-            }
+            if (walking) stopWalking();
             attackHeld = true;
             sendAttack(D2CommandPacket.PHASE_DOWN);
             synchronized (lock) {
-                if (attackKeepAlive != null) attackKeepAlive.cancel(false);
+                if (walkKeepAlive != null) walkKeepAlive.cancel(false);
+            walkKeepAlive = null;
+            if (attackKeepAlive != null) attackKeepAlive.cancel(false);
                 attackKeepAlive = sender.scheduleAtFixedRate(
                         () -> { if (attackHeld) sendAttack(D2CommandPacket.PHASE_HOLD); },
                         180, 180, TimeUnit.MILLISECONDS);
@@ -245,10 +263,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                 : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
         if (pressed) {
-            if (walking && binding != null && binding.left) {
-                walking = false;
-                send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
-            }
+            if (walking && binding != null && binding.left) stopWalking();
             activeSkillSlot = slot;
             if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
             else send(D2CommandPacket.keyPress(0x70 + slot));
