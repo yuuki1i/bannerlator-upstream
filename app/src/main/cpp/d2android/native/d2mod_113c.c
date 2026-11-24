@@ -22,6 +22,7 @@
 #define MOD_PORT 7959
 #define PROTOCOL_COMMAND 1
 #define PROTOCOL_STATE 2
+#define D2AM_PROTOCOL_VERSION 3
 #define STATUS_HOOKED 1
 #define STATUS_WRONG_VERSION 2
 #define STATUS_FAILED 3
@@ -96,7 +97,8 @@ typedef struct {
 typedef struct {
     DWORD id;
     short x, y;
-    BYTE kind, extra;
+    WORD kind;
+    BYTE extra;
 } ThingRecord;
 
 static HMODULE g_module;
@@ -496,7 +498,7 @@ static void collect_units(UnitAny* player, MonsterRecord monsters[MAX_MONSTERS],
             } else if (type == 4 && *item_count < MAX_ITEMS) {
                 ThingRecord* t = &items[(*item_count)++];
                 t->id=id; t->x=(short)x; t->y=(short)y;
-                t->kind=(BYTE)*(DWORD*)((BYTE*)unit + U_TXTNO); t->extra=0;
+                t->kind=(WORD)*(DWORD*)((BYTE*)unit + U_TXTNO); t->extra=0;
             } else if (type == 2 && *object_count < MAX_OBJECTS) {
                 ThingRecord* t = &objects[(*object_count)++];
                 t->id=id; t->x=(short)x; t->y=(short)y;
@@ -509,7 +511,7 @@ static void collect_units(UnitAny* player, MonsterRecord monsters[MAX_MONSTERS],
 static void send_status(void) {
     BYTE p[320]; unsigned n=0;
     p[n++]='D'; p[n++]='2'; p[n++]='A'; p[n++]='M';
-    p[n++]=2; p[n++]=1; put_u16(p,&n,(unsigned)InterlockedIncrement(&g_sequence));
+    p[n++]=D2AM_PROTOCOL_VERSION; p[n++]=1; put_u16(p,&n,(unsigned)InterlockedIncrement(&g_sequence));
     put_u8(p,&n,STATUS_HOOKED);
     unsigned text_len=(unsigned)strlen(g_status_text);
     if (text_len>240) text_len=240;
@@ -534,7 +536,7 @@ static void send_state(void) {
 
     BYTE p[4096]; unsigned n=0;
     p[n++]='D'; p[n++]='2'; p[n++]='A'; p[n++]='M';
-    p[n++]=2; p[n++]=2; put_u16(p,&n,(unsigned)InterlockedIncrement(&g_sequence));
+    p[n++]=D2AM_PROTOCOL_VERSION; p[n++]=2; put_u16(p,&n,(unsigned)InterlockedIncrement(&g_sequence));
     DWORD* width=(DWORD*)((BYTE*)g_client+RVA_SCREEN_SIZE_X);
     DWORD* height=(DWORD*)((BYTE*)g_client+RVA_SCREEN_SIZE_Y);
     put_u16(p,&n,*width ? *width : 800); put_u16(p,&n,*height ? *height : 600);
@@ -555,12 +557,12 @@ static void send_state(void) {
     put_u8(p,&n,item_count);
     for (unsigned i=0;i<item_count;i++) {
         put_u32(p,&n,items[i].id); put_s16(p,&n,items[i].x); put_s16(p,&n,items[i].y);
-        put_u8(p,&n,items[i].kind); put_u8(p,&n,items[i].extra);
+        put_u16(p,&n,items[i].kind); put_u8(p,&n,items[i].extra);
     }
     put_u8(p,&n,object_count);
     for (unsigned i=0;i<object_count;i++) {
         put_u32(p,&n,objects[i].id); put_s16(p,&n,objects[i].x); put_s16(p,&n,objects[i].y);
-        put_u8(p,&n,objects[i].kind); put_u8(p,&n,objects[i].extra);
+        put_u16(p,&n,objects[i].kind); put_u8(p,&n,objects[i].extra);
     }
     put_u8(p,&n,0); put_u16(p,&n,0xFFFF); put_u16(p,&n,0xFFFF);
     for (unsigned i=0;i<16;i++) { put_u16(p,&n,0xFFFF); put_u8(p,&n,0); }
