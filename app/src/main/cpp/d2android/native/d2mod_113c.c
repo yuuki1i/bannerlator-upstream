@@ -2,7 +2,6 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <bcrypt.h>
-#include <winver.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,7 +136,7 @@ static HeldAction g_held[2];
 
 static char g_game_hash[65];
 static char g_common_hash[65];
-static char g_status_text[160];
+static char g_status_text[256];
 
 static DWORD now_ms(void) { return GetTickCount(); }
 
@@ -186,24 +185,46 @@ done:
     return ok;
 }
 
-static int version_113c(const char* path) {
-    DWORD ignored = 0;
-    DWORD size = GetFileVersionInfoSizeA(path, &ignored);
-    if (!size) return -1;
-    BYTE* data = (BYTE*)HeapAlloc(GetProcessHeap(), 0, size);
-    if (!data) return -1;
-    VS_FIXEDFILEINFO* info = NULL;
-    UINT len = 0;
-    int has_info = GetFileVersionInfoA(path, 0, size, data)
-            && VerQueryValueA(data, "\\", (LPVOID*)&info, &len)
-            && info && len >= sizeof(*info);
-    int result = !has_info ? -1 :
-            ((HIWORD(info->dwFileVersionMS) == 1
-            && LOWORD(info->dwFileVersionMS) == 0
-            && HIWORD(info->dwFileVersionLS) == 13
-            && LOWORD(info->dwFileVersionLS) == 60) ? 1 : 0);
-    HeapFree(GetProcessHeap(), 0, data);
-    return result;
+static int git_blob_sha1_file(const char* path, char out[41]) {
+    BCRYPT_ALG_HANDLE alg = NULL;
+    BCRYPT_HASH_HANDLE hash = NULL;
+    PUCHAR object = NULL;
+    DWORD object_len = 0, digest_len = 0, got = 0;
+    HANDLE file = INVALID_HANDLE_VALUE;
+    BYTE digest[20], buffer[65536];
+    int ok = 0;
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA1_ALGORITHM, NULL, 0) < 0) goto done;
+    if (BCryptGetProperty(alg, BCRYPT_OBJECT_LENGTH, (PUCHAR)&object_len, sizeof(object_len), &got, 0) < 0) goto done;
+    if (BCryptGetProperty(alg, BCRYPT_HASH_LENGTH, (PUCHAR)&digest_len, sizeof(digest_len), &got, 0) < 0 || digest_len != 20) goto done;
+    object = (PUCHAR)HeapAlloc(GetProcessHeap(), 0, object_len);
+    if (!object) goto done;
+    if (BCryptCreateHash(alg, &hash, object, object_len, NULL, 0, 0) < 0) goto done;
+    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) goto done;
+    LARGE_INTEGER file_size;
+    if (!GetFileSizeEx(file, &file_size)) goto done;
+    char prefix[64];
+    int prefix_len = _snprintf(prefix, sizeof(prefix), "blob %llu", (unsigned long long)file_size.QuadPart);
+    if (prefix_len <= 0 || prefix_len >= (int)sizeof(prefix)-1) goto done;
+    prefix[prefix_len] = 0;
+    if (BCryptHashData(hash, (PUCHAR)prefix, (ULONG)prefix_len+1, 0) < 0) goto done;
+    for (;;) {
+        DWORD read_count = 0;
+        if (!ReadFile(file, buffer, sizeof(buffer), &read_count, NULL)) goto done;
+        if (read_count == 0) break;
+        if (BCryptHashData(hash, buffer, read_count, 0) < 0) goto done;
+    }
+    if (BCryptFinishHash(hash, digest, sizeof(digest), 0) < 0) goto done;
+    for (unsigned i=0;i<20;i++) sprintf(out + i*2, "%02x", (unsigned)digest[i]);
+    out[40] = 0;
+    ok = 1;
+done:
+    if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+    if (hash) BCryptDestroyHash(hash);
+    if (object) HeapFree(GetProcessHeap(), 0, object);
+    if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    return ok;
 }
 
 static void get_module_dir(char out[MAX_PATH]) {
@@ -213,7 +234,7 @@ static void get_module_dir(char out[MAX_PATH]) {
 }
 
 static int verify_installation(void) {
-    char dir[MAX_PATH], game[MAX_PATH], common[MAX_PATH], client[MAX_PATH];
+    char dir[MAX_PATH], game[MAX_PATH], common[MAX_PATH], client[MAX_PATH], client_blob[41];
     WIN32_FILE_ATTRIBUTE_DATA attr;
     get_module_dir(dir);
     _snprintf(game, sizeof(game), "%s\\game.exe", dir);
@@ -227,7 +248,8 @@ static int verify_installation(void) {
     ULARGE_INTEGER file_size;
     file_size.HighPart = attr.nFileSizeHigh;
     file_size.LowPart = attr.nFileSizeLow;
-    if (file_size.QuadPart != 1093632ULL || version_113c(client) == 0) return 0;
+    if (file_size.QuadPart != 1093632ULL || !git_blob_sha1_file(client, client_blob)
+            || strcmp(client_blob, "6f467b93842b170bcbde2c00308c8c07a5212a1e") != 0) return 0;
 
     g_client = GetModuleHandleA("D2Client.dll");
     g_common = GetModuleHandleA("D2Common.dll");
@@ -248,7 +270,8 @@ static int verify_installation(void) {
             || !fGetUnitX || !fGetUnitY || !fGetMouseXOffset || !fGetMouseYOffset
             || !fClickMap || !fSetSelectedUnit || !fMapToAbsScreen)
         return 0;
-    _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=1.13c", g_game_hash, g_common_hash);
+    _snprintf(g_status_text, sizeof(g_status_text), "D2Android-1.13c-native;game=%s;common=%s;client=%s",
+              g_game_hash, g_common_hash, client_blob);
     return 1;
 }
 
@@ -432,7 +455,7 @@ static void collect_units(UnitAny* player, MonsterRecord monsters[MAX_MONSTERS],
 }
 
 static void send_status(void) {
-    BYTE p[256]; unsigned n=0;
+    BYTE p[320]; unsigned n=0;
     p[n++]='D'; p[n++]='2'; p[n++]='A'; p[n++]='M';
     p[n++]=2; p[n++]=1; put_u16(p,&n,(unsigned)InterlockedIncrement(&g_sequence));
     put_u8(p,&n,STATUS_HOOKED);
