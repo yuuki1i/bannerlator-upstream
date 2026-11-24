@@ -234,6 +234,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
     // Diablo II 1.13c touch runtime is attached only after a verified native module is live.
     private com.winlator.star.d2android.D2ModUdpAdapter d2ModAdapter;
     private com.winlator.star.d2android.D2CommandBridge d2CommandBridge;
+    private com.winlator.star.d2android.D2CompatibilityGate d2CompatibilityGate;
     private com.winlator.star.d2android.D2TouchOverlayView d2TouchOverlay;
     private FrameLayout d2TouchRoot;
     private final android.os.Handler d2TouchHandler =
@@ -7809,6 +7810,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
         if (d2ModAdapter != null) { d2ModAdapter.close(); d2ModAdapter = null; }
         d2TouchOverlay = null;
         d2CommandBridge = null;
+        d2CompatibilityGate = null;
         d2TouchRoot = null;
         sessionInForeground = false;
         if (accountGameSessionCounted) {
@@ -12760,13 +12762,16 @@ public class XServerDisplayActivity extends AppCompatActivity {
         d2TouchRoot = root;
         d2ModAdapter = new com.winlator.star.d2android.D2ModUdpAdapter();
         d2ModAdapter.start();
-        // Keep the compatibility allowlist empty until the 1.13c native module has been verified.
-        d2CommandBridge = new com.winlator.star.d2android.D2CommandBridge(
-                d2ModAdapter,
-                new com.winlator.star.d2android.D2CompatibilityGate(java.util.Collections.emptySet()));
+        d2CompatibilityGate = new com.winlator.star.d2android.D2CompatibilityGate(
+                java.util.Collections.singleton(
+                        com.winlator.star.d2android.D2CompatibilityGate.APPROVED_GAME_SHA256));
+        d2CommandBridge = new com.winlator.star.d2android.D2CommandBridge(d2ModAdapter, d2CompatibilityGate);
         d2TouchAttachPoll = new Runnable() {
             @Override public void run() {
                 if (d2ModAdapter == null || d2TouchRoot == null || isFinishing() || isDestroyed()) return;
+                if (d2ModAdapter.isModuleHooked()) {
+                    d2CompatibilityGate.verifyExecutableSha256(d2ModAdapter.getVerifiedGameSha256());
+                }
                 if (d2CommandBridge != null && d2CommandBridge.isAvailable()) {
                     if (d2TouchOverlay == null) {
                         d2TouchOverlay = new com.winlator.star.d2android.D2TouchOverlayView(
