@@ -174,8 +174,8 @@ public final class D2TouchOverlayView extends View {
                         skillY = rect.centerY();
                         skillRadius = Math.max(1f, Math.min(rect.width(), rect.height()) * .58f);
                         if (bridge != null) {
-                            bridge.selectSkill(i);
-                            bridge.castSkill(i, true);
+                            bridge.selectSkill(slot);
+                            bridge.castSkill(slot, true);
                         }
                         updateAim(x, y);
                         invalidate();
