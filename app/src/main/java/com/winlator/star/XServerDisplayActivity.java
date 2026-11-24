@@ -12764,7 +12764,7 @@ public class XServerDisplayActivity extends AppCompatActivity {
 
     private File resolveD2GameDirectory() {
         if (shortcut == null || container == null || shortcut.path == null) return null;
-        String winPath = shortcut.path.replace('\\\\', '/');
+        String winPath = shortcut.path.replace('\\', '/');
         if (winPath.length() < 3 || winPath.charAt(1) != ':') return null;
         char drive = Character.toLowerCase(winPath.charAt(0));
         File driveRoot;
