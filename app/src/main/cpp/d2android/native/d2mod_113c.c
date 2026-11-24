@@ -491,7 +491,7 @@ static void collect_units(UnitAny* player, MonsterRecord monsters[MAX_MONSTERS],
             DWORD mode = *(DWORD*)((BYTE*)unit + U_MODE);
             int x, y;
             if (!id || !unit_screen(unit, &x, &y)) continue;
-            if (type == 1 && mode != 0 && mode != 12 && *monster_count < MAX_MONSTERS) {
+            if (type == 1 && mode <= 10 && *monster_count < MAX_MONSTERS) {
                 MonsterRecord* m = &monsters[(*monster_count)++];
                 m->id=id; m->x=(short)x; m->y=(short)y; m->hp=100;
                 m->flags=in_town ? 16 : 0; m->nameLength=0;
