@@ -9,7 +9,7 @@ import static org.junit.Assert.*;
 
 public class D2ModUdpAdapterTest {
     private static byte[] statePacket() {
-        ByteBuffer b = ByteBuffer.allocate(80).order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer b = ByteBuffer.allocate(160).order(ByteOrder.LITTLE_ENDIAN);
         b.put((byte)'D').put((byte)'2').put((byte)'A').put((byte)'M').put((byte)2).put((byte)2).putShort((short)1);
         b.putShort((short)800).putShort((short)600);
         b.putShort((short)0).putShort((short)0);
