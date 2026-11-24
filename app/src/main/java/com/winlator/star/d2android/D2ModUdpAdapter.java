@@ -292,8 +292,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         GameState current = freshState();
         if (panel == 4) {
             if (current == null || !current.inGame) return;
-            long stashId = current.hoverType == 2 ? current.hoverId : -1;
-            if (stashId < 0 || stashId == 0xFFFFFFFFL) {
+            long stashId = -1;
+            if (current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL) {
+                for (Thing object : current.objects) {
+                    if (object.id == current.hoverId && object.kind == 267) { stashId=object.id; break; }
+                }
+            }
+            if (stashId < 0) {
                 Thing nearest = null;
                 double best = 400.0 * 400.0;
                 for (Thing object : current.objects) {
