@@ -131,6 +131,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private void sendAttack(int phase) {
         GameState current = freshState();
         if (current == null) return;
+        if (targetId >= 0) {
+            boolean stillVisible = false;
+            for (Monster monster : current.monsters) {
+                if (monster.id == targetId && monster.hpPercent > 0) { stillVisible = true; break; }
+            }
+            if (!stillVisible) { targetId = -1; targetType = -1; }
+        }
         if (targetId < 0 && (current.hoverId == 0xFFFFFFFFL || current.hoverType < 0)) {
             chooseTarget(current);
         }
