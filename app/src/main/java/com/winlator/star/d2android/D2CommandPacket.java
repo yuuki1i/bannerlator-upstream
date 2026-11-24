@@ -19,7 +19,6 @@ public final class D2CommandPacket {
     public static final int CMD_NPC = 8;
     public static final int CMD_SELECT_SKILL = 13;
     public static final int CMD_TAKE = 15;
-    public static final int CMD_SORT = 24;
     public static final int CMD_KEY_PRESS = 36; // D2Android extension: synthesize one guest key tap.
     public static final int CMD_GROUND_SKILL = 37; // D2Android extension: directional ground cast.
     public static final int CMD_TAP = 38; // D2Android extension: direct touch-to-click.
