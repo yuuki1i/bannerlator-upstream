@@ -174,7 +174,7 @@ static int sha256_file(const char* path, char out[65]) {
         if (BCryptHashData(hash, buffer, read_count, 0) < 0) goto done;
     }
     if (BCryptFinishHash(hash, digest, sizeof(digest), 0) < 0) goto done;
-    for (unsigned i=0;i<32;i++) sprintf(out + i*2, "%02x", digest[i]);
+    for (unsigned i=0;i<32;i++) sprintf(out + i*2, "%02x", (unsigned)digest[i]);
     out[64] = 0;
     ok = 1;
 done:
