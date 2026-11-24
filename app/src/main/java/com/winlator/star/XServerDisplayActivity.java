@@ -12750,7 +12750,12 @@ public class XServerDisplayActivity extends AppCompatActivity {
     }
 
     private boolean isD2CollectorShortcut() {
-        if (shortcut == null || !"game.exe".equalsIgnoreCase(getExecutable())) return false;
+        if (shortcut == null) return false;
+        String executable = getExecutable();
+        if (executable == null) return false;
+        if ("启动游戏.exe".equalsIgnoreCase(executable)
+                || "启动游戏.bat".equalsIgnoreCase(executable)) return true;
+        if (!"game.exe".equalsIgnoreCase(executable)) return false;
         String args = shortcut.getExtra("execArgs");
         if (args == null) return false;
         String lower = args.toLowerCase(java.util.Locale.ROOT);
@@ -16528,6 +16533,9 @@ return true;
         if (shortcut != null) {
             boolean d2LauncherReady = isD2CollectorShortcut() && ensureD2RuntimeFiles();
             String execArgs = shortcut.getExtra("execArgs");
+            if (d2LauncherReady && !"game.exe".equalsIgnoreCase(getExecutable()))
+                execArgs = D2LauncherProfile.ARGUMENTS;
+            if (execArgs == null) execArgs = "";
             // Windows Steam with GPU drawing: Steam's -cef-disable-gpu is left out (see windowsSteamGpuDrawing).
             if (windowsSteamSession && windowsSteamGpuDrawing())
                 execArgs = com.winlator.star.store.WindowsSteamClient.withoutCefDisableGpu(execArgs);
