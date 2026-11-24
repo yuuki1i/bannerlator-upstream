@@ -46,18 +46,18 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     public static final class GameState {
         public final int width, height, playerX, playerY, hoverType;
-        public final boolean inGame;
+        public final boolean inGame, inTown;
         public final long hoverId;
         public final List<Monster> monsters;
         public final List<Thing> items, objects;
         public final int[] hotkeySkills;
         public final boolean[] hotkeyLeft;
         public final long receivedAt;
-        GameState(int width, int height, int playerX, int playerY, int hoverType, boolean inGame,
+        GameState(int width, int height, int playerX, int playerY, int hoverType, boolean inGame, boolean inTown,
                   long hoverId, List<Monster> monsters, List<Thing> items, List<Thing> objects,
                   int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
             this.width=width; this.height=height; this.playerX=playerX; this.playerY=playerY;
-            this.hoverType=hoverType; this.inGame=inGame; this.hoverId=hoverId;
+            this.hoverType=hoverType; this.inGame=inGame; this.inTown=inTown; this.hoverId=hoverId;
             this.monsters=Collections.unmodifiableList(monsters);
             this.items=Collections.unmodifiableList(items);
             this.objects=Collections.unmodifiableList(objects);
@@ -352,6 +352,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         }
     }
 
+    @Override public boolean sortInventory(boolean charmsFixed) {
+        GameState current = freshState();
+        if (current == null || !current.inGame || !current.inTown) return false;
+        send(D2CommandPacket.sortInventory(charmsFixed));
+        return true;
+    }
+
     @Override public int nearbyItemCount() {
         GameState current = freshState();
         if (current == null || !current.inGame) return 0;
@@ -502,7 +509,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             b.getShort(); b.getShort(); // pointer
             b.getInt(); b.getInt(); // UI flags
             int levelNo=u16(b);
-            b.get(); b.get(); // town, flags
+            int inTown = u8(b); b.get(); // flags
             boolean inGame = levelNo > 0;
             int playerX=b.getShort(), playerY=b.getShort();
             b.get(); b.get(); // life, mana
@@ -538,7 +545,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                     left[i] = (b.get() & 0xFF) != 0;
                 }
             }
-            return new GameState(width,height,playerX,playerY,hoverType,inGame,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
+            return new GameState(width,height,playerX,playerY,hoverType,inGame,inTown!=0,hoverId,monsters,items,objects,hotkeys,left,System.currentTimeMillis());
         } catch (RuntimeException e) { return null; }
     }
 
