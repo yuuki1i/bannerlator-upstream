@@ -19,6 +19,7 @@ public final class D2CommandBridge {
         }
         /** Optional target cycling: direction is -1 or +1. */
         default void cycleTarget(int direction) {}
+        default void openPanel(int panel) {}
     }
 
     private final GameAdapter adapter;
@@ -68,6 +69,12 @@ public final class D2CommandBridge {
     public boolean cycleTarget(int direction) {
         if (!isAvailable() || direction == 0) return false;
         adapter.cycleTarget(direction < 0 ? -1 : 1);
+        return true;
+    }
+
+    public boolean openPanel(int panel) {
+        if (!isAvailable() || panel < 0 || panel > 4) return false;
+        adapter.openPanel(panel);
         return true;
     }
 
