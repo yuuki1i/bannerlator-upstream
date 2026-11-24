@@ -136,6 +136,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         GameState currentState = freshState();
         if (currentState == null || !currentState.inGame) return;
         if (attackHeld) stopAttackForMovement();
+        stopLeftSkillForMovement();
         int dx = Math.round(clamp(x) * 260f);
         int dy = Math.round(clamp(y) * 260f);
         int phase = walking ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN;
@@ -220,6 +221,26 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             }
             sendAttack(D2CommandPacket.PHASE_UP);
         }
+    }
+
+    private void stopLeftSkillForMovement() {
+        if (activeSkillSlot < 0) return;
+        SkillBinding binding = skill(activeSkillSlot);
+        if (binding == null || !binding.left) return;
+        synchronized (lock) {
+            if (skillKeepAlive != null) skillKeepAlive.cancel(false);
+            skillKeepAlive = null;
+        }
+        if (activeSkillTargetId >= 0)
+            send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP,
+                    activeSkillTargetType, activeSkillTargetId));
+        if (groundSkillHeld)
+            send(D2CommandPacket.groundSkill(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP,
+                    Math.round(aimX*260f), Math.round(aimY*260f)));
+        activeSkillSlot = -1;
+        activeSkillTargetId = -1;
+        activeSkillTargetType = -1;
+        groundSkillHeld = false;
     }
 
     private void stopAttackForMovement() {
