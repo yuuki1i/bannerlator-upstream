@@ -390,6 +390,9 @@ static void process_unit_command(const BYTE* p, unsigned length) {
 }
 
 
+static int level_number(UnitAny* player);
+static int is_town_level(int level);
+
 /* 1.13c inventory grid accessors, based on the public D2Structs layout. */
 #define SORT_U_INVENTORY 0x60
 #define SORT_INV_FIRST 0x0C
