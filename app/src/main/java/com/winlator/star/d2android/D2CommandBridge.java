@@ -24,6 +24,7 @@ public final class D2CommandBridge {
         default void talk() {}
         default void tap(float normalizedX, float normalizedY, boolean pressed) {}
         default int nearbyItemCount() { return 0; }
+        default boolean sortInventory(boolean charmsFixed) { return false; }
     }
 
     private final GameAdapter adapter;
@@ -99,6 +100,10 @@ public final class D2CommandBridge {
         adapter.tap(Math.max(0f,Math.min(1f,normalizedX)),
                 Math.max(0f,Math.min(1f,normalizedY)), pressed);
         return true;
+    }
+
+    public boolean sortInventory(boolean charmsFixed) {
+        return isAvailable() && adapter.sortInventory(charmsFixed);
     }
 
     public int nearbyItemCount() {
