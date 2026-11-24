@@ -32,6 +32,20 @@ public class D2ModUdpAdapterTest {
         return Arrays.copyOf(b.array(), b.position());
     }
 
+    @Test public void statusHandshakeExposesVerifiedGameFingerprint() {
+        String gameHash = "7baeda5e815fbe7a807d6a102aada579cd7a1b89383dd4a9b5d92f887ef165bf";
+        String status = "D2Android-1.13c-native;game=" + gameHash + ";common=verified;client=verified";
+        byte[] packet = new byte[10 + status.length()];
+        packet[0]='D'; packet[1]='2'; packet[2]='A'; packet[3]='M';
+        packet[4]=2; packet[5]=1; packet[8]=1; packet[9]=(byte)status.length();
+        System.arraycopy(status.getBytes(java.nio.charset.StandardCharsets.UTF_8),0,packet,10,status.length());
+        D2ModUdpAdapter adapter = new D2ModUdpAdapter();
+        adapter.handlePacket(packet,packet.length);
+        assertTrue(adapter.isModuleHooked());
+        assertEquals(gameHash,adapter.getVerifiedGameSha256());
+        adapter.close();
+    }
+
     @Test public void parsesStateAndMonsterTarget() {
         byte[] packet = statePacket();
         D2ModUdpAdapter.GameState state = D2ModUdpAdapter.parseState(packet, packet.length);
