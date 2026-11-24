@@ -790,6 +790,7 @@ static void send_state(void) {
 static void game_tick(void) {
     DWORD now=now_ms();
     process_commands();
+    d2_sort_tick(fGetPlayerUnit(), now);
 
     if (g_walk.active) {
         if ((LONG)(now-g_walk.expires)>=0) stop_walk_now();
