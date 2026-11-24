@@ -29,3 +29,14 @@ Bannerlator/Wine 的游戏快捷方式应指向同目录的 `game.exe`，启动�
 - Android 侧加入 D2AC/D2AM 二进制协议编码、UDP 状态接收和 1.13c fail-closed 适配器边界。
 - 触屏层支持移动、攻击、拖动瞄准、多指并发，以及 F1-F8 两页技能按钮；技能 ID 从游戏状态热键表读取。
 - 当前 native 1.13c 注入模块及其函数/结构偏移仍需独立验证。兼容门未开放前不会向游戏发送任何未经验证的命令。
+
+
+## 1.13c native runtime and touch layer
+
+The Standard build now compiles `d2android_mod.dll` and `D2AndroidLauncher.exe` as 32-bit PE assets. The launcher starts `game.exe -3dfx -direct` suspended, injects the module, and resumes the game. The module binds the D2AM/D2AC UDP protocol on loopback and runs game-thread work from a `WH_GETMESSAGE` hook.
+
+Before reporting itself ready, the module checks the measured Collector's Edition 1.13c `Game.exe` and `D2Common.dll` SHA-256 fingerprints and the `D2Client.dll` file size/version metadata. It uses the 1.13c address table for the client functions; no 1.13d patch bytes or RVAs are reused. A mismatch leaves the overlay disabled.
+
+The touch surface includes continuous joystick movement, separate held attack, F1-F8 skill buttons with drag aiming and target cycling, a panel/pickup/talk menu, and a persisted layout editor (position, size, opacity, shape, built-in texture themes).
+
+Known gaps: no real-device/game smoke test has been completed yet; ground-targeted skills still need a dedicated path, inventory auto-sort is not enabled, and stash opening currently requires the stash object to be the hovered target. These are not represented as completed features.
