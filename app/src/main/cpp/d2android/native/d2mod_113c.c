@@ -66,7 +66,7 @@
 #define U_TYPE 0x00
 #define U_ID 0x0C
 #define U_MODE 0x10
-#define U_TXTNO 0x20
+#define U_TXTNO 0x04
 #define U_PATH 0x2C
 #define U_LISTNEXT 0xE8
 #define PATH_ROOM1 0x1C
