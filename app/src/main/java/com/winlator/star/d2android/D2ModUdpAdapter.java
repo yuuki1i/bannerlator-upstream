@@ -176,7 +176,6 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         }
         activeSkillTargetId = chosen.id;
         activeSkillTargetType = 1;
-        send(D2CommandPacket.highlight(1, chosen.id));
         send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, 1, chosen.id));
     }
 
@@ -410,7 +409,6 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         Monster chosen = candidates.get(next);
         targetId = chosen.id;
         targetType = 1;
-        send(D2CommandPacket.highlight(1, chosen.id));
     }
 
     private void chooseTarget(GameState current) {
