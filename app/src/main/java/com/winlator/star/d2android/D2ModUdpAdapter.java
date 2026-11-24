@@ -96,6 +96,18 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     public String getStatusText() { return statusText; }
+    public boolean isModuleHooked() {
+        return status == STATUS_HOOKED && statusText.contains("D2Android-1.13c-native");
+    }
+    public String getVerifiedGameSha256() {
+        int start = statusText.indexOf("game=");
+        if (start < 0) return "";
+        start += 5;
+        int end = statusText.indexOf(';', start);
+        if (end < 0) return "";
+        String hash = statusText.substring(start, end);
+        return hash.matches("(?i)[0-9a-f]{64}") ? hash.toLowerCase() : "";
+    }
 
     public void setSkillBinding(int slot, int skillId, boolean left) {
         if (slot < 0 || slot >= skills.length || skillId < 0 || skillId > 0xFFFF)
@@ -130,16 +142,16 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         Monster chosen = candidates.get(0);
         if (chosen.id == activeSkillTargetId) return;
         SkillBinding binding = skill(activeSkillSlot);
-        if (binding == null) return;
+        int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
         if (activeSkillTargetId >= 0) {
-            send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                    D2CommandPacket.PHASE_UP, activeSkillTargetType, activeSkillTargetId));
+            send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                    activeSkillTargetType, activeSkillTargetId));
         }
         activeSkillTargetId = chosen.id;
         activeSkillTargetType = 1;
         send(D2CommandPacket.highlight(1, chosen.id));
-        send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                D2CommandPacket.PHASE_DOWN, 1, chosen.id));
+        send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, 1, chosen.id));
     }
 
     @Override public void attack(boolean pressed) {
@@ -182,16 +194,21 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     }
 
     @Override public void selectSkill(int slot) {
+        if (slot < 0 || slot > 7) return;
         SkillBinding binding = skill(slot);
         if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
+        else send(D2CommandPacket.keyPress(0x70 + slot)); // game-configured F1-F8 binding
     }
 
     @Override public void castSkill(int slot, boolean pressed) {
+        if (slot < 0 || slot > 7) return;
         SkillBinding binding = skill(slot);
-        if (binding == null) return;
+        int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
+                : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
         if (pressed) {
             activeSkillSlot = slot;
-            send(D2CommandPacket.selectSkill(binding.left, binding.id));
+            if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
+            else send(D2CommandPacket.keyPress(0x70 + slot));
             GameState current = freshState();
             if (current == null) return;
             long id = targetId >= 0 ? targetId : current.hoverId;
@@ -204,13 +221,12 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             if (id >= 0 && id != 0xFFFFFFFFL && type >= 0) {
                 activeSkillTargetId = id;
                 activeSkillTargetType = type;
-                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                        D2CommandPacket.PHASE_DOWN, type, id));
+                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_DOWN, type, id));
             }
         } else {
             if (activeSkillTargetId >= 0) {
-                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                        D2CommandPacket.PHASE_UP, activeSkillTargetType, activeSkillTargetId));
+                send(D2CommandPacket.unit(button, D2CommandPacket.PHASE_UP,
+                        activeSkillTargetType, activeSkillTargetId));
             }
             activeSkillSlot = -1;
             activeSkillTargetId = -1;
