@@ -196,15 +196,16 @@ static int version_113c(const char* path) {
     if (!data) return -1;
     VS_FIXEDFILEINFO* info = NULL;
     UINT len = 0;
-    int ok = GetFileVersionInfoA(path, 0, size, data)
+    int has_info = GetFileVersionInfoA(path, 0, size, data)
             && VerQueryValueA(data, "\\", (LPVOID*)&info, &len)
-            && info && len >= sizeof(*info)
-            && HIWORD(info->dwFileVersionMS) == 1
+            && info && len >= sizeof(*info);
+    int result = !has_info ? -1 :
+            ((HIWORD(info->dwFileVersionMS) == 1
             && LOWORD(info->dwFileVersionMS) == 0
             && HIWORD(info->dwFileVersionLS) == 13
-            && LOWORD(info->dwFileVersionLS) == 60;
+            && LOWORD(info->dwFileVersionLS) == 60) ? 1 : 0);
     HeapFree(GetProcessHeap(), 0, data);
-    return ok;
+    return result;
 }
 
 static void get_module_dir(char out[MAX_PATH]) {
