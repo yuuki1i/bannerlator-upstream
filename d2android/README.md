@@ -35,7 +35,7 @@ Bannerlator/Wine 的游戏快捷方式应指向同目录的 `game.exe`，启动�
 
 The Standard build now compiles `d2android_mod.dll` and `D2AndroidLauncher.exe` as 32-bit PE assets. The launcher starts `game.exe -3dfx -direct` suspended, injects the module, and resumes the game. The module binds the D2AM/D2AC UDP protocol on loopback and runs game-thread work from a `WH_GETMESSAGE` hook.
 
-Before reporting itself ready, the module checks the measured Collector's Edition 1.13c `Game.exe` and `D2Common.dll` SHA-256 fingerprints and the `D2Client.dll` file size/version metadata. It uses the 1.13c address table for the client functions; no 1.13d patch bytes or RVAs are reused. A mismatch leaves the overlay disabled.
+Before reporting itself ready, the module checks the measured Collector's Edition 1.13c `Game.exe` and `D2Common.dll` SHA-256 fingerprints and the `D2Client.dll` file size plus its recorded Git blob SHA-1. It uses the 1.13c address table for the client functions; no 1.13d patch bytes or RVAs are reused. A mismatch leaves the overlay disabled.
 
 The touch surface includes continuous joystick movement, separate held attack, F1-F8 skill buttons with drag aiming and target cycling, a panel/pickup/talk menu, and a persisted layout editor (position, size, opacity, shape, built-in texture themes).
 
