@@ -53,6 +53,8 @@ public final class D2ControlProfile {
     public final Element movement = new Element(.12f, .76f, .23f, .23f, .72f, Shape.CIRCLE, "");
     public final Element attack = new Element(.88f, .82f, .12f, .12f, .88f, Shape.CIRCLE, "");
     public final Element skillPageToggle = new Element(.90f, .55f, .07f, .07f, .78f, Shape.ROUNDED, "");
+    public final Element targetPrev = new Element(.76f, .48f, .075f, .075f, .78f, Shape.ROUNDED, "");
+    public final Element targetNext = new Element(.85f, .48f, .075f, .075f, .78f, Shape.ROUNDED, "");
     // Two independently persisted skill pages. Only four are visible at a time.
     public final Element[] skills = {
             new Element(.62f, .82f, .085f, .085f, .82f, Shape.ROUNDED, ""),
@@ -68,7 +70,8 @@ public final class D2ControlProfile {
     public JSONObject toJson() throws JSONException {
         JSONObject root = new JSONObject().put("schema", 1).put("game", "diablo2-lod-1.13c")
                 .put("movement", movement.toJson()).put("attack", attack.toJson())
-                .put("skillPageToggle", skillPageToggle.toJson());
+                .put("skillPageToggle", skillPageToggle.toJson())
+                .put("targetPrev", targetPrev.toJson()).put("targetNext", targetNext.toJson());
         JSONArray array = new JSONArray();
         for (Element skill : skills) array.put(skill.toJson());
         return root.put("skills", array);
@@ -83,8 +86,12 @@ public final class D2ControlProfile {
         apply(profile.movement, root.getJSONObject("movement"));
         apply(profile.attack, root.getJSONObject("attack"));
         JSONArray array = root.getJSONArray("skills");
-        if (array.length() != profile.skills.length) throw new JSONException("Expected four skill controls");
-        for (int i = 0; i < profile.skills.length; i++) apply(profile.skills[i], array.getJSONObject(i));
+        if (array.length() != 4 && array.length() != profile.skills.length)
+            throw new JSONException("Expected four or eight skill controls");
+        for (int i = 0; i < array.length(); i++) apply(profile.skills[i], array.getJSONObject(i));
+        if (root.has("skillPageToggle")) apply(profile.skillPageToggle, root.getJSONObject("skillPageToggle"));
+        if (root.has("targetPrev")) apply(profile.targetPrev, root.getJSONObject("targetPrev"));
+        if (root.has("targetNext")) apply(profile.targetNext, root.getJSONObject("targetNext"));
         return profile;
     }
 
