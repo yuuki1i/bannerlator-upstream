@@ -39,12 +39,15 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         public final int width, height, playerX, playerY, hoverType;
         public final long hoverId;
         public final List<Monster> monsters;
+        public final int[] hotkeySkills;
+        public final boolean[] hotkeyLeft;
         public final long receivedAt;
         GameState(int width, int height, int playerX, int playerY, int hoverType,
-                  long hoverId, List<Monster> monsters, long receivedAt) {
+                  long hoverId, List<Monster> monsters, int[] hotkeySkills, boolean[] hotkeyLeft, long receivedAt) {
             this.width=width; this.height=height; this.playerX=playerX; this.playerY=playerY;
             this.hoverType=hoverType; this.hoverId=hoverId;
-            this.monsters=Collections.unmodifiableList(monsters); this.receivedAt=receivedAt;
+            this.monsters=Collections.unmodifiableList(monsters);
+            this.hotkeySkills=hotkeySkills; this.hotkeyLeft=hotkeyLeft; this.receivedAt=receivedAt;
         }
     }
 
@@ -215,7 +218,13 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             statusText = new String(data, 10, n, StandardCharsets.UTF_8);
         } else if (type == 2) {
             GameState parsed = parseState(data, length);
-            if (parsed != null) state = parsed;
+            if (parsed != null) {
+                state = parsed;
+                for (int i=0;i<8;i++) {
+                    int skillId = parsed.hotkeySkills[i];
+                    if (skillId > 0 && skillId < 0xFFFF) setSkillBinding(i, skillId, parsed.hotkeyLeft[i]);
+                }
+            }
         }
     }
 
@@ -248,8 +257,30 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
                 byte[] name=new byte[nameLength]; b.get(name);
                 monsters.add(new Monster(id,x,y,hp,flags,new String(name,StandardCharsets.UTF_8)));
             }
-            return new GameState(width,height,playerX,playerY,hoverType,hoverId,monsters,System.currentTimeMillis());
+            skipThings(b); // item list
+            skipThings(b); // object list
+            int[] hotkeys = new int[16];
+            boolean[] left = new boolean[16];
+            java.util.Arrays.fill(hotkeys, -1);
+            if (b.hasRemaining()) {
+                b.get(); // character class
+                b.getShort(); b.getShort(); // current left/right skills
+                for (int i=0;i<16;i++) {
+                    if (b.remaining()<3) return null;
+                    int skill = b.getShort() & 0xFFFF;
+                    hotkeys[i] = skill == 0xFFFF ? -1 : skill;
+                    left[i] = (b.get() & 0xFF) != 0;
+                }
+            }
+            return new GameState(width,height,playerX,playerY,hoverType,hoverId,monsters,hotkeys,left,System.currentTimeMillis());
         } catch (RuntimeException e) { return null; }
+    }
+
+    private static void skipThings(ByteBuffer b) {
+        if (!b.hasRemaining()) throw new IllegalArgumentException("Missing unit list");
+        int count = b.get() & 0xFF;
+        if (count > 128 || b.remaining() < count * 10) throw new IllegalArgumentException("Invalid unit list");
+        b.position(b.position() + count * 10);
     }
 
     private void send(byte[] bytes) {
