@@ -28,6 +28,7 @@ public final class D2TouchOverlayView extends View {
     private int editPointer = -1;
     private int activeSkill = -1;
     private int skillPage = 0;
+    private boolean menuOpen;
 
     private float moveX, moveY, moveRadius;
     private float skillX, skillY, skillRadius;
@@ -85,6 +86,8 @@ public final class D2TouchOverlayView extends View {
         drawElement(canvas, profile.skillPageToggle, skillPage == 0 ? "1/2" : "2/2");
         drawElement(canvas, profile.targetPrev, "目标-");
         drawElement(canvas, profile.targetNext, "目标+");
+        drawElement(canvas, profile.menuButton, "菜单");
+        if (menuOpen) drawMenu(canvas);
         if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
         if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
         if (editingElement != null) {
@@ -94,6 +97,49 @@ public final class D2TouchOverlayView extends View {
             canvas.drawRect(bounds(editingElement), paint);
             paint.setStyle(Paint.Style.FILL);
         }
+    }
+
+    private static final String[] MENU_LABELS = {
+            "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "整理背包"
+    };
+
+    private RectF menuBounds(int index) {
+        float density = getResources().getDisplayMetrics().density;
+        float rowHeight = 42f * density, panelWidth = 172f * density;
+        float left = Math.max(8f * density, getWidth() - panelWidth - 12f * density);
+        float top = 12f * density + index * rowHeight;
+        return new RectF(left, top, left + panelWidth, top + rowHeight - 3f * density);
+    }
+
+    private void drawMenu(Canvas canvas) {
+        float density = getResources().getDisplayMetrics().density;
+        RectF panel = new RectF(menuBounds(0).left - 5f * density,
+                menuBounds(0).top - 5f * density,
+                menuBounds(MENU_LABELS.length - 1).right + 5f * density,
+                menuBounds(MENU_LABELS.length - 1).bottom + 5f * density);
+        paint.setColor(0xE6222630);
+        canvas.drawRoundRect(panel, 12f * density, 12f * density, paint);
+        paint.setColor(0xF2FFFFFF);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(14f * density);
+        for (int i=0;i<MENU_LABELS.length;i++) {
+            RectF row = menuBounds(i);
+            paint.setColor(i % 2 == 0 ? 0xB0444C5C : 0xB0333B49);
+            canvas.drawRoundRect(row, 7f * density, 7f * density, paint);
+            paint.setColor(0xF2FFFFFF);
+            canvas.drawText(MENU_LABELS[i], row.centerX(), row.centerY() + 5f * density, paint);
+        }
+    }
+
+    private void activateMenuItem(int index) {
+        if (bridge != null) {
+            if (index <= 4) bridge.openPanel(index);
+            else if (index == 5) bridge.autoPickup();
+            else if (index == 6) bridge.talk();
+            else if (index == 7) bridge.sortInventory();
+        }
+        menuOpen = false;
+        invalidate();
     }
 
     private void drawGestureRing(Canvas canvas, float x, float y, float radius) {
@@ -119,6 +165,7 @@ public final class D2TouchOverlayView extends View {
     }
 
     private D2ControlProfile.Element elementAt(float x, float y) {
+        if (contains(profile.menuButton, x, y)) return profile.menuButton;
         if (contains(profile.targetPrev, x, y)) return profile.targetPrev;
         if (contains(profile.targetNext, x, y)) return profile.targetNext;
         if (contains(profile.skillPageToggle, x, y)) return profile.skillPageToggle;
@@ -147,6 +194,18 @@ public final class D2TouchOverlayView extends View {
         if (editing) return handleEditingTouch(event, action, id, x, y);
 
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (menuOpen) {
+                for (int i=0;i<MENU_LABELS.length;i++) {
+                    if (menuBounds(i).contains(x,y)) { activateMenuItem(i); return true; }
+                }
+                menuOpen = false;
+                invalidate();
+            }
+            if (contains(profile.menuButton, x, y)) {
+                menuOpen = !menuOpen;
+                invalidate();
+                return true;
+            }
             if (movePointer == -1 && contains(profile.movement, x, y)) {
                 movePointer = id;
                 RectF rect = bounds(profile.movement);
