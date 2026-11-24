@@ -6,9 +6,8 @@ import java.nio.ByteOrder;
 /**
  * Wire-compatible encoder for the D2Android game-module command datagrams.
  *
- * The packet format is deliberately isolated from UI code. It is not a claim that the
- * upstream 1.13d native module is compatible with 1.13c; the native build gate remains closed
- * until a separately verified 1.13c module is available.
+ * The packet format is deliberately isolated from UI code. The 1.13c native module is built
+ * separately and must report its verified Game.exe/D2Common fingerprints before commands enable.
  */
 public final class D2CommandPacket {
     public static final int PROTOCOL_VERSION = 1;
@@ -60,11 +59,6 @@ public final class D2CommandPacket {
 
     public static byte[] highlight(int unitType, long unitId) {
         return command(CMD_HIGHLIGHT, 8).putInt(unitType).putInt((int) unitId).array();
-    }
-
-    public static byte[] take(int unitType, long unitId) {
-        return command(CMD_TAKE, 8).put((byte) unitType).put((byte) 0).put((byte) 0).put((byte) 0)
-                .putInt((int) unitId).array();
     }
 
     public static byte[] take(int unitType, long unitId) {
