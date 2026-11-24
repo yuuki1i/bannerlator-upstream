@@ -322,11 +322,27 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         });
     }
 
+    private void sendDirect(byte[] bytes) {
+        DatagramSocket s = socket;
+        if (s == null || bytes == null) return;
+        try { s.send(new DatagramPacket(bytes, bytes.length, InetAddress.getByName("127.0.0.1"), MOD_PORT)); }
+        catch (IOException ignored) {}
+    }
+
     private static float clamp(float v) { return Float.isFinite(v) ? Math.max(-1f, Math.min(1f, v)) : 0f; }
 
     @Override public void close() {
-        if (walking) send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
-        if (attackHeld) sendAttack(D2CommandPacket.PHASE_UP);
+        if (walking) sendDirect(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+        if (attackHeld) {
+            GameState current = freshState();
+            if (current != null) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id != 0xFFFFFFFFL && type >= 0)
+                    sendDirect(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT,
+                            D2CommandPacket.PHASE_UP, type, id));
+            }
+        }
         receiver = null;
         attackHeld = false;
         walking = false;
