@@ -418,7 +418,6 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         Monster chosen = candidates.get(0);
         targetId = chosen.id;
         targetType = 1;
-        send(D2CommandPacket.highlight(1, chosen.id));
     }
 
     private SkillBinding skill(int slot) {
