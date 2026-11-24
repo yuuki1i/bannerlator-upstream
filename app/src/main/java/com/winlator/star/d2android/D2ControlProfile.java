@@ -55,6 +55,7 @@ public final class D2ControlProfile {
     public final Element skillPageToggle = new Element(.90f, .55f, .07f, .07f, .78f, Shape.ROUNDED, "");
     public final Element targetPrev = new Element(.76f, .48f, .075f, .075f, .78f, Shape.ROUNDED, "");
     public final Element targetNext = new Element(.85f, .48f, .075f, .075f, .78f, Shape.ROUNDED, "");
+    public final Element menuButton = new Element(.91f, .08f, .075f, .075f, .82f, Shape.ROUNDED, "");
     // Two independently persisted skill pages. Only four are visible at a time.
     public final Element[] skills = {
             new Element(.62f, .82f, .085f, .085f, .82f, Shape.ROUNDED, ""),
@@ -71,7 +72,8 @@ public final class D2ControlProfile {
         JSONObject root = new JSONObject().put("schema", 1).put("game", "diablo2-lod-1.13c")
                 .put("movement", movement.toJson()).put("attack", attack.toJson())
                 .put("skillPageToggle", skillPageToggle.toJson())
-                .put("targetPrev", targetPrev.toJson()).put("targetNext", targetNext.toJson());
+                .put("targetPrev", targetPrev.toJson()).put("targetNext", targetNext.toJson())
+                .put("menuButton", menuButton.toJson());
         JSONArray array = new JSONArray();
         for (Element skill : skills) array.put(skill.toJson());
         return root.put("skills", array);
@@ -92,6 +94,7 @@ public final class D2ControlProfile {
         if (root.has("skillPageToggle")) apply(profile.skillPageToggle, root.getJSONObject("skillPageToggle"));
         if (root.has("targetPrev")) apply(profile.targetPrev, root.getJSONObject("targetPrev"));
         if (root.has("targetNext")) apply(profile.targetNext, root.getJSONObject("targetNext"));
+        if (root.has("menuButton")) apply(profile.menuButton, root.getJSONObject("menuButton"));
         return profile;
     }
 
