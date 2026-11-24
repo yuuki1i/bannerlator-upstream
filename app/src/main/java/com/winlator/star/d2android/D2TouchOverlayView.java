@@ -77,9 +77,11 @@ public final class D2TouchOverlayView extends View {
         super.onDraw(canvas);
         drawElement(canvas, profile.movement, "移动");
         drawElement(canvas, profile.attack, "攻击");
-        for (int i = 0; i < profile.skills.length; i++) {
-            drawElement(canvas, profile.skills[i], "技" + (i + 1));
+        for (int i = 0; i < 4; i++) {
+            int slot = skillPage * 4 + i;
+            drawElement(canvas, profile.skills[slot], "F" + (slot + 1));
         }
+        drawElement(canvas, profile.skillPageToggle, skillPage == 0 ? "1/2" : "2/2");
         if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
         if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
         if (editingElement != null) {
@@ -114,8 +116,10 @@ public final class D2TouchOverlayView extends View {
     }
 
     private D2ControlProfile.Element elementAt(float x, float y) {
-        for (int i = profile.skills.length - 1; i >= 0; i--) {
-            if (contains(profile.skills[i], x, y)) return profile.skills[i];
+        if (contains(profile.skillPageToggle, x, y)) return profile.skillPageToggle;
+        for (int i = 3; i >= 0; i--) {
+            int slot = skillPage * 4 + i;
+            if (contains(profile.skills[slot], x, y)) return profile.skills[slot];
         }
         if (contains(profile.attack, x, y)) return profile.attack;
         if (contains(profile.movement, x, y)) return profile.movement;
@@ -153,12 +157,18 @@ public final class D2TouchOverlayView extends View {
                 invalidate();
                 return true;
             }
+            if (contains(profile.skillPageToggle, x, y)) {
+                skillPage = 1 - skillPage;
+                invalidate();
+                return true;
+            }
             if (skillPointer == -1) {
-                for (int i = 0; i < profile.skills.length; i++) {
-                    if (contains(profile.skills[i], x, y)) {
+                for (int i = 0; i < 4; i++) {
+                    int slot = skillPage * 4 + i;
+                    if (contains(profile.skills[slot], x, y)) {
                         skillPointer = id;
-                        activeSkill = i;
-                        RectF rect = bounds(profile.skills[i]);
+                        activeSkill = slot;
+                        RectF rect = bounds(profile.skills[slot]);
                         skillX = rect.centerX();
                         skillY = rect.centerY();
                         skillRadius = Math.max(1f, Math.min(rect.width(), rect.height()) * .58f);
