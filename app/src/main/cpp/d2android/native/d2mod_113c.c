@@ -317,6 +317,15 @@ static void walk_point(int dx, int dy, int* x, int* y) {
     *x += dx; *y += dy;
 }
 
+static void stop_walk_now(void) {
+    if (!g_walk.active && !g_walk.stopping) return;
+    int x,y;
+    walk_point(g_walk.dx,g_walk.dy,&x,&y);
+    click_ground(2,x,y);
+    g_walk.active=0;
+    g_walk.stopping=0;
+}
+
 static void click_unit(DWORD click_type, int button, DWORD type, DWORD id) {
     UnitAny* unit = fFindServerSideUnit(id, type);
     if (!unit) unit = fFindClientSideUnit(id, type);
@@ -354,6 +363,7 @@ static void process_unit_command(const BYTE* p, unsigned length) {
         return;
     }
     if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
+        stop_walk_now();
         if (held->active && (held->id != id || held->type != type)) release_held(button);
         held->active = 1; held->button = button; held->type = type; held->id = id;
         held->expires = now_ms() + 650;
@@ -374,10 +384,29 @@ static void process_command(const BYTE* p, unsigned length) {
         int dx = (short)(p[10] | (p[11] << 8));
         int dy = (short)(p[12] | (p[13] << 8));
         if (phase == PHASE_UP) {
-            if (g_walk.active) { g_walk.active = 0; g_walk.stopping = 1; }
+            stop_walk_now();
         } else if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
-            g_walk.active = 1; g_walk.stopping = 0;
-            g_walk.dx = dx; g_walk.dy = dy; g_walk.expires = now_ms() + 650;
+            if (!g_walk.active) {
+                release_held(BUTTON_LEFT);
+                release_held(BUTTON_RIGHT);
+                for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
+                    GroundAction* ground=&g_ground[button];
+                    if (ground->active) {
+                        int gx,gy; walk_point(ground->dx,ground->dy,&gx,&gy);
+                        click_ground(button==BUTTON_RIGHT?5u:2u,gx,gy);
+                        memset(ground,0,sizeof(*ground));
+                    }
+                }
+                g_walk.stopping=0;
+                g_walk.lastPress=now_ms();
+                g_walk.active=1;
+                g_walk.dx=dx; g_walk.dy=dy;
+                g_walk.expires=now_ms()+650;
+                int x,y; walk_point(dx,dy,&x,&y); click_ground(0,x,y);
+            } else {
+                g_walk.dx=dx; g_walk.dy=dy;
+                g_walk.expires=now_ms()+650;
+            }
         }
     } else if (cmd == CMD_UNIT) {
         process_unit_command(p, length);
@@ -565,18 +594,11 @@ static void game_tick(void) {
     process_commands();
 
     if (g_walk.active) {
-        if ((LONG)(now-g_walk.expires)>=0) { g_walk.active=0; g_walk.stopping=1; }
+        if ((LONG)(now-g_walk.expires)>=0) stop_walk_now();
         else {
             int x,y; walk_point(g_walk.dx,g_walk.dy,&x,&y);
-            if (now-g_walk.lastPress>=90) {
-                click_ground(0,x,y); g_walk.lastPress=now;
-            } else click_ground(1,x,y);
+            click_ground(1,x,y);
         }
-    }
-    if (g_walk.stopping) {
-        int x,y; walk_point(g_walk.dx,g_walk.dy,&x,&y);
-        click_ground(2,x,y);
-        g_walk.stopping=0;
     }
 
     for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
