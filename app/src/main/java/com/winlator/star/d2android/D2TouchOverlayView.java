@@ -10,16 +10,27 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 /**
- * Independent Diablo II touch overlay. In-game commands are emitted only through a verified bridge.
- * Edit mode supports dragging each control and persists the layout on release.
+ * Diablo II touch surface. Movement, attack and skill gestures own independent pointer IDs,
+ * so a player can move, hold attack and drag-aim a skill simultaneously.
+ *
+ * The view deliberately sends semantic commands only. A verified 1.13c game adapter is still
+ * required before commands can reach the game process.
  */
 public final class D2TouchOverlayView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final D2ControlProfileStore store;
     private final D2ControlProfile profile;
     private D2CommandBridge bridge;
-    private int movePointer = -1, attackPointer = -1, editPointer = -1;
-    private float moveX, moveY, moveRadius, editOffsetX, editOffsetY;
+
+    private int movePointer = -1;
+    private int attackPointer = -1;
+    private int skillPointer = -1;
+    private int editPointer = -1;
+    private int activeSkill = -1;
+
+    private float moveX, moveY, moveRadius;
+    private float skillX, skillY, skillRadius;
+    private float editOffsetX, editOffsetY;
     private D2ControlProfile.Element editingElement;
     private boolean editing;
 
@@ -33,7 +44,11 @@ public final class D2TouchOverlayView extends View {
     }
 
     public D2ControlProfile getProfile() { return profile; }
-    public void setBridge(D2CommandBridge bridge) { this.bridge = bridge; }
+    public void setBridge(D2CommandBridge bridge) {
+        releasePointers();
+        this.bridge = bridge;
+    }
+
     public void setEditing(boolean editing) {
         if (this.editing == editing) return;
         releasePointers();
@@ -62,22 +77,26 @@ public final class D2TouchOverlayView extends View {
         super.onDraw(canvas);
         drawElement(canvas, profile.movement, "移动");
         drawElement(canvas, profile.attack, "攻击");
-        for (int i = 0; i < profile.skills.length; i++) drawElement(canvas, profile.skills[i], "技" + (i + 1));
-        if (movePointer != -1) {
-            paint.setColor(0xBFFFFFFF);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(3f);
-            canvas.drawCircle(moveX, moveY, moveRadius, paint);
-            paint.setStyle(Paint.Style.FILL);
+        for (int i = 0; i < profile.skills.length; i++) {
+            drawElement(canvas, profile.skills[i], "技" + (i + 1));
         }
+        if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
+        if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
         if (editingElement != null) {
-            RectF selected = bounds(editingElement);
             paint.setColor(0xFFFFFFFF);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f);
-            canvas.drawRect(selected, paint);
+            canvas.drawRect(bounds(editingElement), paint);
             paint.setStyle(Paint.Style.FILL);
         }
+    }
+
+    private void drawGestureRing(Canvas canvas, float x, float y, float radius) {
+        paint.setColor(0xBFFFFFFF);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(3f);
+        canvas.drawCircle(x, y, radius, paint);
+        paint.setStyle(Paint.Style.FILL);
     }
 
     private void drawElement(Canvas canvas, D2ControlProfile.Element element, String label) {
@@ -109,39 +128,14 @@ public final class D2TouchOverlayView extends View {
         int id = event.getPointerId(index);
         float x = event.getX(index), y = event.getY(index);
 
-        if (editing) {
-            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-                if (editPointer != -1) return true;
-                editingElement = elementAt(x, y);
-                if (editingElement != null) {
-                    editPointer = id;
-                    editOffsetX = x - editingElement.x * getWidth();
-                    editOffsetY = y - editingElement.y * getHeight();
-                }
-                invalidate();
-                return true;
-            }
-            if (action == MotionEvent.ACTION_MOVE && editPointer != -1) {
-                for (int p = 0; p < event.getPointerCount(); p++) {
-                    if (event.getPointerId(p) == editPointer) {
-                        moveEditedElement(event.getX(p), event.getY(p));
-                        break;
-                    }
-                }
-                return true;
-            }
-            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP
-                    || action == MotionEvent.ACTION_CANCEL) {
-                if (action == MotionEvent.ACTION_CANCEL || id == editPointer) {
-                    if (editingElement != null) store.save(profile);
-                    editPointer = -1;
-                    editingElement = null;
-                    invalidate();
-                }
-                return true;
-            }
+        if (action == MotionEvent.ACTION_CANCEL) {
+            if (editing) finishEditing(true);
+            else releasePointers();
+            invalidate();
             return true;
         }
+
+        if (editing) return handleEditingTouch(event, action, id, x, y);
 
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
             if (movePointer == -1 && contains(profile.movement, x, y)) {
@@ -159,39 +153,78 @@ public final class D2TouchOverlayView extends View {
                 invalidate();
                 return true;
             }
-            for (int i = 0; i < profile.skills.length; i++) {
-                if (contains(profile.skills[i], x, y)) {
-                    if (bridge != null) bridge.selectSkill(i);
-                    return true;
+            if (skillPointer == -1) {
+                for (int i = 0; i < profile.skills.length; i++) {
+                    if (contains(profile.skills[i], x, y)) {
+                        skillPointer = id;
+                        activeSkill = i;
+                        RectF rect = bounds(profile.skills[i]);
+                        skillX = rect.centerX();
+                        skillY = rect.centerY();
+                        skillRadius = Math.max(1f, Math.min(rect.width(), rect.height()) * .58f);
+                        if (bridge != null) {
+                            bridge.selectSkill(i);
+                            bridge.castSkill(i, true);
+                        }
+                        updateAim(x, y);
+                        invalidate();
+                        return true;
+                    }
                 }
             }
-            return false;
+            return movePointer != -1 || attackPointer != -1 || skillPointer != -1;
         }
+
         if (action == MotionEvent.ACTION_MOVE) {
             for (int p = 0; p < event.getPointerCount(); p++) {
                 int pointer = event.getPointerId(p);
-                if (pointer == movePointer) updateMove(event.getX(p), event.getY(p));
+                float px = event.getX(p), py = event.getY(p);
+                if (pointer == movePointer) updateMove(px, py);
+                if (pointer == skillPointer) updateAim(px, py);
             }
-            return movePointer != -1 || attackPointer != -1;
+            return movePointer != -1 || attackPointer != -1 || skillPointer != -1;
         }
-        if (action == MotionEvent.ACTION_CANCEL) {
-            releasePointers();
-            invalidate();
-            return true;
-        }
+
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
-            if (id == movePointer) {
-                movePointer = -1;
-                if (bridge != null) bridge.move(D2JoystickMath.Vector.zero());
-            }
-            if (id == attackPointer) {
-                attackPointer = -1;
-                if (bridge != null) bridge.attack(false);
-            }
+            releasePointer(id);
             invalidate();
             return true;
         }
         return true;
+    }
+
+    private boolean handleEditingTouch(MotionEvent event, int action, int id, float x, float y) {
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (editPointer != -1) return true;
+            editingElement = elementAt(x, y);
+            if (editingElement != null) {
+                editPointer = id;
+                editOffsetX = x - editingElement.x * getWidth();
+                editOffsetY = y - editingElement.y * getHeight();
+            }
+            invalidate();
+            return true;
+        }
+        if (action == MotionEvent.ACTION_MOVE && editPointer != -1) {
+            for (int p = 0; p < event.getPointerCount(); p++) {
+                if (event.getPointerId(p) == editPointer) {
+                    moveEditedElement(event.getX(p), event.getY(p));
+                    break;
+                }
+            }
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
+            if (id == editPointer) finishEditing(false);
+            return true;
+        }
+        return true;
+    }
+
+    private void finishEditing(boolean cancelled) {
+        if (!cancelled && editingElement != null) store.save(profile);
+        editPointer = -1;
+        editingElement = null;
     }
 
     private void moveEditedElement(float x, float y) {
@@ -211,14 +244,40 @@ public final class D2TouchOverlayView extends View {
         invalidate();
     }
 
+    private void updateAim(float x, float y) {
+        D2JoystickMath.Vector vector = D2JoystickMath.fromTouch(skillX, skillY, x, y, skillRadius, .08f);
+        if (bridge != null) bridge.aim(vector);
+        invalidate();
+    }
+
+    private void releasePointer(int pointerId) {
+        if (pointerId == movePointer) {
+            movePointer = -1;
+            if (bridge != null) bridge.move(D2JoystickMath.Vector.zero());
+        }
+        if (pointerId == attackPointer) {
+            attackPointer = -1;
+            if (bridge != null) bridge.attack(false);
+        }
+        if (pointerId == skillPointer) {
+            int releasedSkill = activeSkill;
+            skillPointer = -1;
+            activeSkill = -1;
+            if (bridge != null && releasedSkill >= 0) bridge.castSkill(releasedSkill, false);
+        }
+    }
+
     private void releasePointers() {
+        if (bridge != null) {
+            if (movePointer != -1) bridge.move(D2JoystickMath.Vector.zero());
+            if (attackPointer != -1) bridge.attack(false);
+            if (skillPointer != -1 && activeSkill >= 0) bridge.castSkill(activeSkill, false);
+        }
         movePointer = -1;
         attackPointer = -1;
+        skillPointer = -1;
+        activeSkill = -1;
         editPointer = -1;
         editingElement = null;
-        if (bridge != null) {
-            bridge.move(D2JoystickMath.Vector.zero());
-            bridge.attack(false);
-        }
     }
 }
