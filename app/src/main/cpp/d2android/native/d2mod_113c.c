@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>
+#include "d2sortlayout_113c.c"
 #include <bcrypt.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -33,6 +34,7 @@
 #define CMD_KEY_PRESS 36
 #define CMD_GROUND_SKILL 37
 #define CMD_TAP 38
+#define CMD_SORT 24
 
 #define PHASE_DOWN 0
 #define PHASE_HOLD 1
@@ -51,6 +53,8 @@
 #define RVA_CLICK_MAP 0x0001BF20
 #define RVA_SET_SELECTED_UNIT 0x00051860
 #define RVA_ALWAYS_RUN 0x0011C3EC
+#define RVA_GAME_INFO 0x0011B980
+#define RVA_GET_UI_VAR 0x000BE400
 #define RVA_FIND_SERVER_SIDE_UNIT 0x000A5B40
 #define RVA_FIND_CLIENT_SIDE_UNIT 0x000A5B20
 #define RVA_MOUSE_Y 0x0011B824
@@ -85,6 +89,9 @@ typedef DWORD (__fastcall *GetMouseOffsetFn)(void);
 typedef void (__stdcall *MapToAbsScreenFn)(int* x, int* y);
 typedef void (__stdcall *ClickMapFn)(DWORD mouseFlag, DWORD x, DWORD y, DWORD type);
 typedef void (__fastcall *SetSelectedUnitFn)(UnitAny* unit);
+typedef void* (__stdcall *GetItemTextFn)(DWORD txtNo);
+typedef void (__stdcall *SendPacketFn)(size_t length, DWORD arg1, BYTE* packet);
+typedef DWORD (__fastcall *GetUiVarFn)(DWORD varNo);
 
 typedef struct {
     DWORD id;
@@ -123,6 +130,9 @@ static GetMouseOffsetFn fGetMouseXOffset, fGetMouseYOffset;
 static MapToAbsScreenFn fMapToAbsScreen;
 static ClickMapFn fClickMap;
 static SetSelectedUnitFn fSetSelectedUnit;
+static GetItemTextFn fGetItemText;
+static SendPacketFn fSendPacket;
+static GetUiVarFn fGetUiVar;
 
 static struct {
     int active, stopping;
@@ -274,6 +284,10 @@ static int verify_installation(void) {
     fFindClientSideUnit = (FindUnitFn)((BYTE*)g_client + RVA_FIND_CLIENT_SIDE_UNIT);
     fClickMap = (ClickMapFn)((BYTE*)g_client + RVA_CLICK_MAP);
     fSetSelectedUnit = (SetSelectedUnitFn)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
+    fGetUiVar = (GetUiVarFn)((BYTE*)g_client + RVA_GET_UI_VAR);
+    fGetItemText = (GetItemTextFn)GetProcAddress(g_common, MAKEINTRESOURCEA(10695));
+    HMODULE d2net = GetModuleHandleA("D2Net.dll");
+    fSendPacket = d2net ? (SendPacketFn)GetProcAddress(d2net, MAKEINTRESOURCEA(10024)) : NULL;
     fGetUnitX = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_X);
     fGetUnitY = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_Y);
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
@@ -375,6 +389,194 @@ static void process_unit_command(const BYTE* p, unsigned length) {
     }
 }
 
+
+/* 1.13c inventory grid accessors, based on the public D2Structs layout. */
+#define SORT_U_INVENTORY 0x60
+#define SORT_INV_FIRST 0x0C
+#define SORT_INV_CURSOR 0x20
+#define SORT_U_DATA 0x14
+#define SORT_U_ID 0x0C
+#define SORT_U_TXTNO 0x04
+#define SORT_U_PATH 0x2C
+#define SORT_IDATA_LOCATION 0x45
+#define SORT_IDATA_NODEPAGE 0x69
+#define SORT_IDATA_NEXTINV 0x64
+#define SORT_IPATH_X 0x0C
+#define SORT_IPATH_Y 0x10
+#define SORT_ITXT_CODE 0x40
+#define SORT_ITXT_WIDTH 0xFC
+#define SORT_ITXT_HEIGHT 0xFD
+#define SORT_STEP_MS 1600u
+#define SORT_LIMIT_MS 30000u
+
+static int d2_readable(const void* p, size_t size) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!p || !size || !VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT
+            || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD))) return 0;
+    uintptr_t end = (uintptr_t)p + size;
+    return end >= (uintptr_t)p && end <= (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+}
+
+static DWORD d2_rd32(const void* p, unsigned offset) {
+    return *(const DWORD*)((const BYTE*)p + offset);
+}
+static BYTE d2_rd8(const void* p, unsigned offset) {
+    return *((const BYTE*)p + offset);
+}
+static void* d2_rdp(const void* p, unsigned offset) {
+    return *(void**)((BYTE*)p + offset);
+}
+
+typedef struct {
+    BYTE pad0[0x33];
+    char serverIp[0x56];
+    BYTE pad1[0x48];
+    char realm[0x18];
+} D2GameInfoProbe;
+
+typedef enum { SORT_STEP_NONE, SORT_STEP_PICK, SORT_STEP_PLACE, SORT_STEP_UNDO } D2SortStep;
+static struct {
+    int active, n, k, moves;
+    DWORD activeMs, since, lastTick;
+    DWORD fromX, fromY, toX, toY;
+    void* player;
+    D2SortStep step;
+    SortItem items[SORT_MAX];
+} g_sort;
+
+static int d2_single_player(void) {
+    D2GameInfoProbe* info = *(D2GameInfoProbe**)((BYTE*)g_client + RVA_GAME_INFO);
+    return d2_readable(info, sizeof(D2GameInfoProbe))
+            && info->serverIp[0] == 0 && info->realm[0] == 0;
+}
+static int d2_world_paused(void) {
+    return fGetUiVar && (fGetUiVar(0x09) || fGetUiVar(0x0B));
+}
+static DWORD d2_sort_cursor_id(void* player) {
+    void* inventory = d2_readable(player, SORT_U_INVENTORY + 4)
+            ? d2_rdp(player, SORT_U_INVENTORY) : NULL;
+    void* item = d2_readable(inventory, SORT_INV_CURSOR + 4)
+            ? d2_rdp(inventory, SORT_INV_CURSOR) : NULL;
+    return d2_readable(item, 0x10) ? d2_rd32(item, SORT_U_ID) : 0;
+}
+static void d2_sort_send_id(BYTE op, DWORD id) {
+    if (!fSendPacket) return;
+    BYTE packet[5] = {op};
+    *(DWORD*)(packet + 1) = id;
+    fSendPacket(sizeof(packet), 1, packet);
+}
+static void d2_sort_send_to_inventory(DWORD id, DWORD x, DWORD y) {
+    if (!fSendPacket) return;
+    BYTE packet[17] = {0x18};
+    *(DWORD*)(packet + 1) = id;
+    *(DWORD*)(packet + 5) = x;
+    *(DWORD*)(packet + 9) = y;
+    *(DWORD*)(packet + 13) = 0;
+    fSendPacket(sizeof(packet), 1, packet);
+}
+static int d2_sort_read(void* player, SortItem* out, int charmsFixed) {
+    void* inventory = d2_readable(player, SORT_U_INVENTORY + 4)
+            ? d2_rdp(player, SORT_U_INVENTORY) : NULL;
+    void* item = d2_readable(inventory, SORT_INV_FIRST + 4)
+            ? d2_rdp(inventory, SORT_INV_FIRST) : NULL;
+    int n = 0, guard = 0;
+    while (item && guard++ < 512) {
+        void* data = d2_readable(item, SORT_U_DATA + 4) ? d2_rdp(item, SORT_U_DATA) : NULL;
+        if (!d2_readable(data, 0x70)) return -1;
+        if (d2_rd8(data, SORT_IDATA_LOCATION) == 0x00
+                && d2_rd8(data, SORT_IDATA_NODEPAGE) == 1) {
+            void* path = d2_readable(item, SORT_U_PATH + 4) ? d2_rdp(item, SORT_U_PATH) : NULL;
+            void* txt = fGetItemText ? fGetItemText(d2_rd32(item, SORT_U_TXTNO)) : NULL;
+            if (n >= SORT_MAX || !d2_readable(path, 0x14) || !d2_readable(txt, 0x100)) return -1;
+            int w = d2_rd8(txt, SORT_ITXT_WIDTH), h = d2_rd8(txt, SORT_ITXT_HEIGHT);
+            if (w < 1 || h < 1 || w > SORT_W || h > SORT_H) return -1;
+            const char* code = (const char*)((BYTE*)txt + SORT_ITXT_CODE);
+            SortItem* it = &out[n++];
+            it->id = d2_rd32(item, SORT_U_ID);
+            it->order = d2_rd32(item, SORT_U_TXTNO);
+            it->x = (BYTE)d2_rd32(path, SORT_IPATH_X);
+            it->y = (BYTE)d2_rd32(path, SORT_IPATH_Y);
+            it->w = (BYTE)w; it->h = (BYTE)h;
+            it->group = (BYTE)(w * h == 1 ? SG_SMALL : SG_BIG);
+            it->fixed = (BYTE)(charmsFixed && code[0]=='c' && code[1]=='m'
+                    && code[2]>='1' && code[2]<='3');
+            it->tx = it->x; it->ty = it->y;
+        }
+        item = d2_rdp(data, SORT_IDATA_NEXTINV);
+    }
+    return n;
+}
+static void d2_sort_done(void) {
+    g_sort.active = 0;
+    g_sort.step = SORT_STEP_NONE;
+}
+static void d2_sort_start(void* player, BYTE place, BYTE options, DWORD now) {
+    if (g_sort.active || !player || place != 0 || !fSendPacket || !fGetItemText || !fGetUiVar) return;
+    if (!d2_single_player() || d2_world_paused() || !is_town_level(level_number(player))) return;
+    if (fGetUiVar(0x0C) || fGetUiVar(0x17) || fGetUiVar(0x19) || fGetUiVar(0x1A)) return;
+    if (d2_sort_cursor_id(player) != 0) return;
+    int n = d2_sort_read(player, g_sort.items, (options & 1) != 0);
+    if (n <= 0) return;
+    if (!sortLayout(g_sort.items, n)) return;
+    g_sort.active = 1; g_sort.n = n; g_sort.k = 0; g_sort.moves = 0;
+    g_sort.activeMs = 0; g_sort.player = player;
+    g_sort.since = g_sort.lastTick = now; g_sort.step = SORT_STEP_NONE;
+}
+static void d2_sort_tick(void* player, DWORD now) {
+    if (!g_sort.active) return;
+    if (!player || player != g_sort.player) { d2_sort_done(); return; }
+    if (d2_world_paused()) { g_sort.since = g_sort.lastTick = now; return; }
+    DWORD dt = now - g_sort.lastTick;
+    g_sort.activeMs += dt; g_sort.lastTick = now;
+    DWORD cursor = d2_sort_cursor_id(player);
+    DWORD waited = now - g_sort.since;
+    SortItem* item = &g_sort.items[g_sort.k];
+    switch (g_sort.step) {
+    case SORT_STEP_NONE: {
+        if (cursor) { d2_sort_done(); break; }
+        SortItem current[SORT_MAX];
+        int n = d2_sort_read(player, current, 0);
+        if (n != g_sort.n) { d2_sort_done(); break; }
+        for (int i=0;i<g_sort.n;i++) {
+            int found=0;
+            for (int j=0;j<n;j++) if (current[j].id==g_sort.items[i].id) {
+                g_sort.items[i].x=current[j].x; g_sort.items[i].y=current[j].y; found=1; break;
+            }
+            if (!found) { d2_sort_done(); return; }
+        }
+        int k; BYTE x,y;
+        int r=sortNextMove(g_sort.items,g_sort.n,&k,&x,&y);
+        if (r==0 || g_sort.activeMs>SORT_LIMIT_MS || g_sort.moves>=3*g_sort.n || r<0) {
+            d2_sort_done(); break;
+        }
+        g_sort.k=k; g_sort.fromX=g_sort.items[k].x; g_sort.fromY=g_sort.items[k].y;
+        g_sort.toX=x; g_sort.toY=y;
+        d2_sort_send_id(0x19,g_sort.items[k].id);
+        g_sort.step=SORT_STEP_PICK; g_sort.since=now;
+        break;
+    }
+    case SORT_STEP_PICK:
+        if (cursor==item->id) {
+            d2_sort_send_to_inventory(item->id,g_sort.toX,g_sort.toY);
+            g_sort.step=SORT_STEP_PLACE; g_sort.since=now;
+        } else if (waited>SORT_STEP_MS) d2_sort_done();
+        break;
+    case SORT_STEP_PLACE:
+        if (!cursor) {
+            g_sort.moves++; g_sort.step=SORT_STEP_NONE; g_sort.since=now;
+        } else if (waited>SORT_STEP_MS) {
+            if (cursor==item->id) {
+                d2_sort_send_to_inventory(item->id,g_sort.fromX,g_sort.fromY);
+                g_sort.step=SORT_STEP_UNDO; g_sort.since=now;
+            } else d2_sort_done();
+        }
+        break;
+    case SORT_STEP_UNDO:
+        if (!cursor || waited>SORT_STEP_MS) d2_sort_done();
+        break;
+    }
+}
+
 static void process_command(const BYTE* p, unsigned length) {
     if (length < 8 || p[0] != 'D' || p[1] != '2' || p[2] != 'A' || p[3] != 'C') return;
     LONG cmd = p[5] & 0xFF;
@@ -410,6 +612,8 @@ static void process_command(const BYTE* p, unsigned length) {
         BYTE vk = p[8];
         keybd_event(vk, 0, 0, 0);
         keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+    } else if (cmd == CMD_SORT && length >= 10) {
+        d2_sort_start(fGetPlayerUnit(), p[8], p[9], now_ms());
     } else if (cmd == CMD_TAP && length >= 14) {
         int button=p[8], phase=p[9];
         if (button != BUTTON_LEFT && button != BUTTON_RIGHT) return;
