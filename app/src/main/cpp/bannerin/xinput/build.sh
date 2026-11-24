@@ -223,6 +223,19 @@ dlls() {
       check_dll "$arch" "$name" "$out/$arch/$name.dll" "$def"
     done
   done
+  # D2Android 1.13c runtime: the game is 32-bit, so both the injected module and
+  # suspended-process launcher are built as i386 PE files and bundled as APK assets.
+  mkdir -p "$out/d2android"
+  i686-w64-mingw32-clang $CFLAGS_COMMON -D_WIN32_WINNT=0x0601 -shared -s \
+    -o "$out/d2android/d2android_mod.dll" \
+    "$HERE/../../d2android/native/d2mod_113c.c" -lws2_32 -lbcrypt -lversion -luser32
+  i686-w64-mingw32-clang $CFLAGS_COMMON -D_WIN32_WINNT=0x0601 -mwindows -s \
+    -o "$out/d2android/D2AndroidLauncher.exe" \
+    "$HERE/../../d2android/native/d2launcher.c" -luser32
+  [ "$(llvm-readobj --file-headers "$out/d2android/d2android_mod.dll" | sed -n 's/^ *Format: //p' | head -1)" = "COFF-i386" ] || die "D2Android native module is not i386"
+  [ "$(llvm-readobj --file-headers "$out/d2android/D2AndroidLauncher.exe" | sed -n 's/^ *Format: //p' | head -1)" = "COFF-i386" ] || die "D2Android launcher is not i386"
+  grep -aq 'D2Android-1.13c-native' "$out/d2android/d2android_mod.dll" || die "D2Android module marker missing"
+  say "D2Android 1.13c: native module + launcher built (i386)"
   rm -rf "$tmp"
   python3 - "$out" "$DLLS" "$ARCHES" <<'PY'
 import hashlib, json, os, sys
