@@ -8,10 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#pragma comment(lib, "ws2_32")
-#pragma comment(lib, "bcrypt")
-#pragma comment(lib, "version")
-
 /*
  * Diablo II LoD 1.13c touch module.
  *
@@ -133,8 +129,8 @@ static struct {
 
 typedef struct {
     int active;
-    int button, type;
-    DWORD id, expires, lastPress;
+    int button;
+    DWORD type, id, expires, lastPress;
 } HeldAction;
 static HeldAction g_held[2];
 
@@ -245,7 +241,7 @@ static int verify_installation(void) {
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
     fGetMouseYOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_Y_OFFSET);
     fClickMap = (ClickMapFn)((BYTE*)g_client + RVA_CLICK_MAP);
-    fSetSelectedUnit = (SetSelectedUnitFn)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
+    fSetSelectedUnit = (DWORD)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
     fMapToAbsScreen = (MapToAbsScreenFn)GetProcAddress(g_common, (LPCSTR)11087);
     if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindServerSideUnit || !fFindClientSideUnit
             || !fGetUnitX || !fGetUnitY || !fGetMouseXOffset || !fGetMouseYOffset
@@ -537,6 +533,7 @@ static LRESULT CALLBACK get_message_proc(int code, WPARAM wparam, LPARAM lparam)
 }
 
 static BOOL CALLBACK find_game_window(HWND hwnd, LPARAM param) {
+    (void)param;
     DWORD pid=0;
     GetWindowThreadProcessId(hwnd,&pid);
     if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd)) return TRUE;
