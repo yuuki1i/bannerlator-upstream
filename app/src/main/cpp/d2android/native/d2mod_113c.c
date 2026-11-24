@@ -502,7 +502,7 @@ static void collect_units(UnitAny* player, MonsterRecord monsters[MAX_MONSTERS],
             } else if (type == 2 && *object_count < MAX_OBJECTS) {
                 ThingRecord* t = &objects[(*object_count)++];
                 t->id=id; t->x=(short)x; t->y=(short)y;
-                t->kind=(BYTE)*(DWORD*)((BYTE*)unit + U_TXTNO); t->extra=0;
+                t->kind=(WORD)*(DWORD*)((BYTE*)unit + U_TXTNO); t->extra=0;
             }
         }
     }
