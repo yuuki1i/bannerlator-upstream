@@ -291,9 +291,21 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     @Override public void openPanel(int panel) {
         GameState current = freshState();
         if (panel == 4) {
-            if (current != null && current.inGame && current.hoverType == 2 && current.hoverId != 0xFFFFFFFFL)
-                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
-                        2, current.hoverId));
+            if (current == null || !current.inGame) return;
+            long stashId = current.hoverType == 2 ? current.hoverId : -1;
+            if (stashId < 0 || stashId == 0xFFFFFFFFL) {
+                Thing nearest = null;
+                double best = 400.0 * 400.0;
+                for (Thing object : current.objects) {
+                    if (object.kind != 267) continue; // D2ObjectTxt classId 267: town stash
+                    double dx=object.x-current.playerX, dy=object.y-current.playerY;
+                    double distance=dx*dx+dy*dy;
+                    if (distance < best) { best=distance; nearest=object; }
+                }
+                if (nearest != null) stashId = nearest.id;
+            }
+            if (stashId >= 0 && stashId != 0xFFFFFFFFL)
+                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK, 2, stashId));
             return;
         }
         final int[] keys = {0x43, 0x54, 0x4F, 0x49};
@@ -331,14 +343,24 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     @Override public void talk() {
         GameState current = freshState();
-        if (current == null || !current.inGame || current.hoverType != 1 || current.hoverId == 0xFFFFFFFFL) return;
-        for (Monster monster : current.monsters) {
-            if (monster.id == current.hoverId && (monster.flags & 16) != 0) {
-                send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK,
-                        1, current.hoverId));
-                return;
+        if (current == null || !current.inGame) return;
+        Monster npc = null;
+        if (current.hoverType == 1 && current.hoverId != 0xFFFFFFFFL) {
+            for (Monster monster : current.monsters) {
+                if (monster.id == current.hoverId && (monster.flags & 16) != 0) { npc=monster; break; }
             }
         }
+        if (npc == null) {
+            double best = 360.0 * 360.0;
+            for (Monster monster : current.monsters) {
+                if ((monster.flags & 16) == 0) continue;
+                double dx=monster.x-current.playerX, dy=monster.y-current.playerY;
+                double distance=dx*dx+dy*dy;
+                if (distance < best) { best=distance; npc=monster; }
+            }
+        }
+        if (npc != null)
+            send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK, 1, npc.id));
     }
 
     @Override public void sortInventory() {
