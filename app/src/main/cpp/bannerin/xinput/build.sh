@@ -228,7 +228,7 @@ dlls() {
   mkdir -p "$out/d2android"
   i686-w64-mingw32-clang $CFLAGS_COMMON -D_WIN32_WINNT=0x0601 -shared -s \
     -o "$out/d2android/d2android_mod.dll" \
-    "$HERE/../../d2android/native/d2mod_113c.c" -lws2_32 -lbcrypt -lversion -luser32
+    "$HERE/../../d2android/native/d2mod_113c.c" -lws2_32 -lbcrypt -luser32
   i686-w64-mingw32-clang $CFLAGS_COMMON -D_WIN32_WINNT=0x0601 -mwindows -s \
     -o "$out/d2android/D2AndroidLauncher.exe" \
     "$HERE/../../d2android/native/d2launcher.c" -luser32
