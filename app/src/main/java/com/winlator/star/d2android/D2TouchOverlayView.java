@@ -93,6 +93,10 @@ public final class D2TouchOverlayView extends View {
         drawElement(canvas, profile.targetNext, "目标+");
         drawElement(canvas, profile.menuButton, "菜单");
         if (menuOpen) drawMenu(canvas);
+        if (!editing && bridge != null) {
+            drawPickupHint(canvas);
+            postInvalidateDelayed(500L);
+        }
         if (movePointer != -1) drawGestureRing(canvas, moveX, moveY, moveRadius);
         if (skillPointer != -1) drawGestureRing(canvas, skillX, skillY, skillRadius);
         if (editing) drawEditorPanel(canvas);
@@ -108,6 +112,25 @@ public final class D2TouchOverlayView extends View {
     private static final String[] MENU_LABELS = {
             "角色属性", "技能树", "佣兵", "背包", "大箱子", "拾取附近物品", "与目标对话", "编辑布局"
     };
+
+    private RectF pickupHintBounds() {
+        return new RectF(getWidth() * .23f, getHeight() * .62f,
+                getWidth() * .49f, getHeight() * .69f);
+    }
+
+    private void drawPickupHint(Canvas canvas) {
+        int count = bridge.nearbyItemCount();
+        if (count <= 0) return;
+        RectF rect = pickupHintBounds();
+        float d = getResources().getDisplayMetrics().density;
+        paint.setColor(0xD92B3B35);
+        canvas.drawRoundRect(rect, 9f*d, 9f*d, paint);
+        paint.setColor(0xFFFFFFFF);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(12f*d);
+        canvas.drawText("附近物品 " + count + " · 点击拾取",
+                rect.centerX(), rect.centerY()+4f*d, paint);
+    }
 
     private RectF menuBounds(int index) {
         float density = getResources().getDisplayMetrics().density;
@@ -282,6 +305,11 @@ public final class D2TouchOverlayView extends View {
         if (editing) return handleEditingTouch(event, action, id, x, y);
 
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (!menuOpen && bridge != null && pickupHintBounds().contains(x,y)
+                    && bridge.nearbyItemCount() > 0) {
+                bridge.autoPickup();
+                return true;
+            }
             if (menuOpen) {
                 for (int i=0;i<MENU_LABELS.length;i++) {
                     if (menuBounds(i).contains(x,y)) { activateMenuItem(i); return true; }
