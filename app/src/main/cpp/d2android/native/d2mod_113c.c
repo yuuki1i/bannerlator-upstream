@@ -48,6 +48,9 @@
 #define RVA_GET_MOUSE_Y_OFFSET 0x0003F6D0
 #define RVA_GET_SELECTED_UNIT 0x00051A80
 #define RVA_GET_PLAYER_UNIT 0x000A4D60
+#define RVA_CLICK_MAP 0x0001BF20
+#define RVA_SET_SELECTED_UNIT 0x00051860
+#define RVA_ALWAYS_RUN 0x0011C3EC
 #define RVA_FIND_SERVER_SIDE_UNIT 0x000A5B40
 #define RVA_FIND_CLIENT_SIDE_UNIT 0x000A5B20
 #define RVA_MOUSE_Y 0x0011B824
@@ -80,6 +83,8 @@ typedef UnitAny* (__fastcall *FindUnitFn)(DWORD id, DWORD type);
 typedef int (__fastcall *GetUnitCoordFn)(UnitAny* unit);
 typedef DWORD (__fastcall *GetMouseOffsetFn)(void);
 typedef void (__stdcall *MapToAbsScreenFn)(int* x, int* y);
+typedef void (__stdcall *ClickMapFn)(DWORD mouseFlag, DWORD x, DWORD y, DWORD type);
+typedef void (__fastcall *SetSelectedUnitFn)(UnitAny* unit);
 
 typedef struct {
     DWORD id;
@@ -116,6 +121,8 @@ static FindUnitFn fFindServerSideUnit, fFindClientSideUnit;
 static GetUnitCoordFn fGetUnitX, fGetUnitY;
 static GetMouseOffsetFn fGetMouseXOffset, fGetMouseYOffset;
 static MapToAbsScreenFn fMapToAbsScreen;
+static ClickMapFn fClickMap;
+static SetSelectedUnitFn fSetSelectedUnit;
 
 static struct {
     int active, stopping;
@@ -290,17 +297,13 @@ static int unit_screen(UnitAny* unit, int* sx, int* sy) {
 }
 
 static void click_ground(DWORD click_type, int x, int y) {
-    if (!g_window) return;
-    LPARAM point = MAKELPARAM((WORD)x, (WORD)y);
-    switch (click_type) {
-        case 0: PostMessageA(g_window, WM_LBUTTONDOWN, MK_LBUTTON, point); break;
-        case 1: PostMessageA(g_window, WM_MOUSEMOVE, MK_LBUTTON, point); break;
-        case 2: PostMessageA(g_window, WM_LBUTTONUP, 0, point); break;
-        case 3: PostMessageA(g_window, WM_RBUTTONDOWN, MK_RBUTTON, point); break;
-        case 4: PostMessageA(g_window, WM_MOUSEMOVE, MK_RBUTTON, point); break;
-        case 5: PostMessageA(g_window, WM_RBUTTONUP, 0, point); break;
-        default: break;
-    }
+    DWORD* mouse_x = (DWORD*)(g_client + RVA_MOUSE_X);
+    DWORD* mouse_y = (DWORD*)(g_client + RVA_MOUSE_Y);
+    DWORD old_x = *mouse_x, old_y = *mouse_y;
+    DWORD flags = *(DWORD*)(g_client + RVA_ALWAYS_RUN) ? 0x08 : 0;
+    *mouse_x = 0; *mouse_y = 0;
+    fClickMap(click_type, (DWORD)x, (DWORD)y, flags);
+    *mouse_x = old_x; *mouse_y = old_y;
 }
 
 static void walk_point(int dx, int dy, int* x, int* y) {
@@ -318,7 +321,15 @@ static void click_unit(DWORD click_type, int button, DWORD type, DWORD id) {
     if (!unit) return;
     int x, y;
     if (!unit_screen(unit, &x, &y)) return;
-    click_ground(click_type, x, y);
+    DWORD* mouse_x = (DWORD*)(g_client + RVA_MOUSE_X);
+    DWORD* mouse_y = (DWORD*)(g_client + RVA_MOUSE_Y);
+    DWORD old_x = *mouse_x, old_y = *mouse_y;
+    DWORD flags = *(DWORD*)(g_client + RVA_ALWAYS_RUN) ? 0x08 : 0;
+    *mouse_x = 0; *mouse_y = 0;
+    fSetSelectedUnit(unit);
+    fClickMap(click_type, (DWORD)x, (DWORD)y, flags);
+    fSetSelectedUnit(NULL);
+    *mouse_x = old_x; *mouse_y = old_y;
     (void)button;
 }
 
