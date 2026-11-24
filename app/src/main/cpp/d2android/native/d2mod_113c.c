@@ -13,6 +13,7 @@
  *
  * RVAs are sourced from the 1.13c address table in slashdiablo-maphack/BH/D2Ptrs.h.
  * This module does not reuse the 1.13d hook patch or 1.13d RVAs. It runs game-thread
+ * input and state updates independently from the Android overlay process.
  * work from a WH_GETMESSAGE hook and refuses to initialize unless the owner-supplied
  * Game.exe and D2Common.dll fingerprints match and D2Client.dll has the 1.13c version
  * metadata and expected file size.
