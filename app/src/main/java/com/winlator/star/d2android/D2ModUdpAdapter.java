@@ -368,11 +368,6 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             send(D2CommandPacket.unit(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_CLICK, 1, npc.id));
     }
 
-    @Override public void sortInventory() {
-        GameState current = freshState();
-        if (current != null && current.inGame) send(D2CommandPacket.sortInventory(false));
-    }
-
     @Override public void tap(float normalizedX, float normalizedY, boolean pressed) {
         if (pressed) {
             GameState current = freshState();
