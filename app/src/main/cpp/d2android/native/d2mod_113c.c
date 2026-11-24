@@ -32,6 +32,7 @@
 #define CMD_TAKE 15
 #define CMD_SORT 24
 #define CMD_KEY_PRESS 36
+#define CMD_GROUND_SKILL 37
 
 #define PHASE_DOWN 0
 #define PHASE_HOLD 1
@@ -133,6 +134,11 @@ typedef struct {
     DWORD type, id, expires, lastPress;
 } HeldAction;
 static HeldAction g_held[2];
+typedef struct {
+    int active, button, dx, dy;
+    DWORD expires, lastPress;
+} GroundAction;
+static GroundAction g_ground[2];
 
 static char g_game_hash[65];
 static char g_common_hash[65];
@@ -382,6 +388,27 @@ static void process_command(const BYTE* p, unsigned length) {
         BYTE vk = p[8];
         keybd_event(vk, 0, 0, 0);
         keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+    } else if (cmd == CMD_GROUND_SKILL && length >= 14) {
+        int button = p[8], phase = p[9];
+        if (button != BUTTON_LEFT && button != BUTTON_RIGHT) return;
+        GroundAction* ground = &g_ground[button];
+        if (phase == PHASE_UP) {
+            if (ground->active) {
+                int x,y; walk_point(ground->dx,ground->dy,&x,&y);
+                click_ground(button==BUTTON_RIGHT?5u:2u,x,y);
+                memset(ground,0,sizeof(*ground));
+            }
+        } else if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
+            ground->active=1; ground->button=button;
+            ground->dx=(short)(p[10]|(p[11]<<8));
+            ground->dy=(short)(p[12]|(p[13]<<8));
+            ground->expires=now_ms()+650;
+        } else if (phase == PHASE_CLICK) {
+            int dx=(short)(p[10]|(p[11]<<8)), dy=(short)(p[12]|(p[13]<<8));
+            int x,y; walk_point(dx,dy,&x,&y);
+            click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            click_ground(button==BUTTON_RIGHT?5u:2u,x,y);
+        }
     } else if (cmd == CMD_HIGHLIGHT && length >= 16) {
         /* The Android target selector keeps the lock; the game cursor remains untouched here. */
     } else if (cmd == CMD_SORT) {
@@ -533,6 +560,21 @@ static void game_tick(void) {
         int x,y; walk_point(g_walk.dx,g_walk.dy,&x,&y);
         click_ground(2,x,y);
         g_walk.stopping=0;
+    }
+
+    for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
+        GroundAction* ground = &g_ground[button];
+        if (!ground->active) continue;
+        int x,y; walk_point(ground->dx,ground->dy,&x,&y);
+        if ((LONG)(now-ground->expires)>=0) {
+            click_ground(button==BUTTON_RIGHT?5u:2u,x,y);
+            memset(ground,0,sizeof(*ground));
+        } else if (now-ground->lastPress>=90) {
+            click_ground(button==BUTTON_RIGHT?3u:0u,x,y);
+            ground->lastPress=now;
+        } else {
+            click_ground(button==BUTTON_RIGHT?4u:1u,x,y);
+        }
     }
 
     for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
