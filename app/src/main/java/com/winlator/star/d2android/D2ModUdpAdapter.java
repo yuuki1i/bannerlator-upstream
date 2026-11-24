@@ -158,15 +158,23 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         if (pressed) {
             send(D2CommandPacket.selectSkill(binding.left, binding.id));
             GameState current = freshState();
-            if (current != null && current.hoverId != 0xFFFFFFFFL && current.hoverType >= 0) {
-                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                        D2CommandPacket.PHASE_DOWN, current.hoverType, current.hoverId));
+            if (current != null) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id != 0xFFFFFFFFL && type >= 0) {
+                    send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                            D2CommandPacket.PHASE_DOWN, type, id));
+                }
             }
         } else {
             GameState current = freshState();
-            if (current != null && current.hoverId != 0xFFFFFFFFL && current.hoverType >= 0) {
-                send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
-                        D2CommandPacket.PHASE_UP, current.hoverType, current.hoverId));
+            if (current != null) {
+                long id = targetId >= 0 ? targetId : current.hoverId;
+                int type = targetId >= 0 ? targetType : current.hoverType;
+                if (id != 0xFFFFFFFFL && type >= 0) {
+                    send(D2CommandPacket.unit(binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT,
+                            D2CommandPacket.PHASE_UP, type, id));
+                }
             }
         }
     }
@@ -317,6 +325,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private static float clamp(float v) { return Float.isFinite(v) ? Math.max(-1f, Math.min(1f, v)) : 0f; }
 
     @Override public void close() {
+        if (walking) send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+        if (attackHeld) sendAttack(D2CommandPacket.PHASE_UP);
         receiver = null;
         attackHeld = false;
         walking = false;
