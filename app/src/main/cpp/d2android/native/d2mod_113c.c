@@ -363,7 +363,7 @@ static void process_unit_command(const BYTE* p, unsigned length) {
         return;
     }
     if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
-        stop_walk_now();
+        if (button == BUTTON_LEFT) stop_walk_now();
         if (held->active && (held->id != id || held->type != type)) release_held(button);
         held->active = 1; held->button = button; held->type = type; held->id = id;
         held->expires = now_ms() + 650;
@@ -388,15 +388,6 @@ static void process_command(const BYTE* p, unsigned length) {
         } else if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
             if (!g_walk.active) {
                 release_held(BUTTON_LEFT);
-                release_held(BUTTON_RIGHT);
-                for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
-                    GroundAction* ground=&g_ground[button];
-                    if (ground->active) {
-                        int gx,gy; walk_point(ground->dx,ground->dy,&gx,&gy);
-                        click_ground(button==BUTTON_RIGHT?5u:2u,gx,gy);
-                        memset(ground,0,sizeof(*ground));
-                    }
-                }
                 g_walk.stopping=0;
                 g_walk.lastPress=now_ms();
                 g_walk.active=1;
