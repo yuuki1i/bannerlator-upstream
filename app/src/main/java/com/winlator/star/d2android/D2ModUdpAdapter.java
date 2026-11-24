@@ -89,6 +89,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private volatile int tapX, tapY;
     private ScheduledFuture<?> attackKeepAlive;
     private ScheduledFuture<?> skillKeepAlive;
+    private ScheduledFuture<?> tapKeepAlive;
 
     public void start() {
         synchronized (lock) {
@@ -336,11 +337,25 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             if (current == null) return;
             tapX = Math.max(0, Math.min(current.width - 1, Math.round(normalizedX * current.width)));
             tapY = Math.max(0, Math.min(current.height - 1, Math.round(normalizedY * current.height)));
-            int phase = tapHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN;
+            boolean alreadyHeld = tapHeld;
             tapHeld = true;
-            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT, phase, tapX, tapY));
+            send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                    alreadyHeld ? D2CommandPacket.PHASE_HOLD : D2CommandPacket.PHASE_DOWN, tapX, tapY));
+            if (!alreadyHeld) {
+                synchronized (lock) {
+                    if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+                    tapKeepAlive = sender.scheduleAtFixedRate(() -> {
+                        if (tapHeld) send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT,
+                                D2CommandPacket.PHASE_HOLD, tapX, tapY));
+                    }, 180, 180, TimeUnit.MILLISECONDS);
+                }
+            }
         } else if (tapHeld) {
             tapHeld = false;
+            synchronized (lock) {
+                if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+                tapKeepAlive = null;
+            }
             send(D2CommandPacket.tap(D2CommandPacket.BUTTON_LEFT, D2CommandPacket.PHASE_UP, tapX, tapY));
         }
     }
@@ -540,6 +555,8 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
             attackKeepAlive = null;
             if (skillKeepAlive != null) skillKeepAlive.cancel(false);
             skillKeepAlive = null;
+            if (tapKeepAlive != null) tapKeepAlive.cancel(false);
+            tapKeepAlive = null;
         }
         sender.shutdownNow();
     }
