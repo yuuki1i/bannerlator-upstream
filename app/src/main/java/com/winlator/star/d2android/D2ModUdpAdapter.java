@@ -457,7 +457,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
 
     static GameState parseState(byte[] data, int length) {
         if (length < 59 || data[0] != 'D' || data[1] != '2' || data[2] != 'A' || data[3] != 'M'
-                || (data[4] & 0xFF) != 2 || (data[5] & 0xFF) != 2) return null;
+                || (data[4] & 0xFF) != PROTOCOL_VERSION || (data[5] & 0xFF) != 2) return null;
         try {
             ByteBuffer b = ByteBuffer.wrap(data, 0, length).order(ByteOrder.LITTLE_ENDIAN);
             b.position(8);
@@ -508,11 +508,11 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     private static List<Thing> parseThings(ByteBuffer b) {
         if (!b.hasRemaining()) throw new IllegalArgumentException("Missing unit list");
         int count = b.get() & 0xFF;
-        if (count > 128 || b.remaining() < count * 10) throw new IllegalArgumentException("Invalid unit list");
+        if (count > 128 || b.remaining() < count * 11) throw new IllegalArgumentException("Invalid unit list");
         List<Thing> result = new ArrayList<>(count);
         for (int i=0;i<count;i++) {
             long id=b.getInt() & 0xFFFFFFFFL;
-            int x=b.getShort(), y=b.getShort(), kind=b.get() & 0xFF, extra=b.get() & 0xFF;
+            int x=b.getShort(), y=b.getShort(), kind=b.getShort() & 0xFFFF, extra=b.get() & 0xFF;
             result.add(new Thing(id,x,y,kind,extra));
         }
         return result;
