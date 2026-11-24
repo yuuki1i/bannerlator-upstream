@@ -119,7 +119,6 @@ static GetSelectedUnitFn fGetSelectedUnit;
 static FindUnitFn fFindServerSideUnit, fFindClientSideUnit;
 static GetUnitCoordFn fGetUnitX, fGetUnitY;
 static GetMouseOffsetFn fGetMouseXOffset, fGetMouseYOffset;
-static ClickMapFn fClickMap;
 static DWORD fSetSelectedUnit;
 static MapToAbsScreenFn fMapToAbsScreen;
 
@@ -275,7 +274,6 @@ static int verify_installation(void) {
     fGetUnitY = (GetUnitCoordFn)((BYTE*)g_client + RVA_GET_UNIT_Y);
     fGetMouseXOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_X_OFFSET);
     fGetMouseYOffset = (GetMouseOffsetFn)((BYTE*)g_client + RVA_GET_MOUSE_Y_OFFSET);
-    fClickMap = (ClickMapFn)((BYTE*)g_client + RVA_CLICK_MAP);
     fSetSelectedUnit = (DWORD)((BYTE*)g_client + RVA_SET_SELECTED_UNIT);
     fMapToAbsScreen = (MapToAbsScreenFn)GetProcAddress(g_common, (LPCSTR)11087);
     if (!fGetPlayerUnit || !fGetSelectedUnit || !fFindServerSideUnit || !fFindClientSideUnit
@@ -297,18 +295,18 @@ static int unit_screen(UnitAny* unit, int* sx, int* sy) {
     return 1;
 }
 
-static DWORD click_flags(void) {
-    DWORD* always_run = (DWORD*)((BYTE*)g_client + RVA_ALWAYS_RUN);
-    return (*always_run) ? 8u : 0u;
-}
-
 static void click_ground(DWORD click_type, int x, int y) {
-    DWORD* mouse_x = (DWORD*)((BYTE*)g_client + RVA_MOUSE_X);
-    DWORD* mouse_y = (DWORD*)((BYTE*)g_client + RVA_MOUSE_Y);
-    DWORD old_x = *mouse_x, old_y = *mouse_y;
-    *mouse_x = 0; *mouse_y = 0;
-    fClickMap(click_type, (DWORD)x, (DWORD)y, click_flags());
-    *mouse_x = old_x; *mouse_y = old_y;
+    if (!g_window) return;
+    LPARAM point = MAKELPARAM((WORD)x, (WORD)y);
+    switch (click_type) {
+        case 0: PostMessageA(g_window, WM_LBUTTONDOWN, MK_LBUTTON, point); break;
+        case 1: PostMessageA(g_window, WM_MOUSEMOVE, MK_LBUTTON, point); break;
+        case 2: PostMessageA(g_window, WM_LBUTTONUP, 0, point); break;
+        case 3: PostMessageA(g_window, WM_RBUTTONDOWN, MK_RBUTTON, point); break;
+        case 4: PostMessageA(g_window, WM_MOUSEMOVE, MK_RBUTTON, point); break;
+        case 5: PostMessageA(g_window, WM_RBUTTONUP, 0, point); break;
+        default: break;
+    }
 }
 
 static void walk_point(int dx, int dy, int* x, int* y) {
