@@ -245,6 +245,10 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                 : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
         if (pressed) {
+            if (walking && binding != null && binding.left) {
+                walking = false;
+                send(D2CommandPacket.walk(D2CommandPacket.PHASE_UP, 0, 0));
+            }
             activeSkillSlot = slot;
             if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
             else send(D2CommandPacket.keyPress(0x70 + slot));
