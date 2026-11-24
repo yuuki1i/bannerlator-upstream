@@ -28,11 +28,9 @@ public class D2CommandPacketTest {
         }, packet);
     }
 
-    @Test public void pickupSortAndPanelHotkeyPacketsUseExpectedCommands() {
+    @Test public void pickupAndExtendedInputPacketsUseExpectedCommands() {
         assertArrayEquals(new byte[] {'D','2','A','C',1,15,0,0,4,0,0,0,0x78,0x56,0x34,0x12},
                 D2CommandPacket.take(4, 0x12345678L));
-        assertArrayEquals(new byte[] {'D','2','A','C',1,24,0,0,0,1},
-                D2CommandPacket.sortInventory(true));
         assertArrayEquals(new byte[] {'D','2','A','C',1,36,0,0,0x49},
                 D2CommandPacket.keyPress(0x49));
         assertArrayEquals(new byte[] {'D','2','A','C',1,37,0,0,1,0,100,0,(byte)0x9c,(byte)0xff},
