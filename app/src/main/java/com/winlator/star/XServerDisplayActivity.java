@@ -16531,10 +16531,10 @@ return true;
         }
 
         if (shortcut != null) {
-            boolean d2LauncherReady = isD2CollectorShortcut() && ensureD2RuntimeFiles();
+            boolean d2CollectorShortcut = isD2CollectorShortcut();
+            boolean d2LauncherReady = d2CollectorShortcut && ensureD2RuntimeFiles();
             String execArgs = shortcut.getExtra("execArgs");
-            if (d2LauncherReady && !"game.exe".equalsIgnoreCase(getExecutable()))
-                execArgs = D2LauncherProfile.ARGUMENTS;
+            if (d2CollectorShortcut) execArgs = D2LauncherProfile.ARGUMENTS;
             if (execArgs == null) execArgs = "";
             // Windows Steam with GPU drawing: Steam's -cef-disable-gpu is left out (see windowsSteamGpuDrawing).
             if (windowsSteamSession && windowsSteamGpuDrawing())
@@ -16571,7 +16571,8 @@ return true;
                 // existing shortcut works and a stale loader shortcut is repaired). Same folder → /dir holds.
                 String goldbergName = resolveGoldbergLaunchName(filename);
                 if (goldbergName != null) filename = goldbergName;
-                if (d2LauncherReady) filename = "D2AndroidLauncher.exe";
+                if (d2CollectorShortcut)
+                filename = d2LauncherReady ? "D2AndroidLauncher.exe" : D2LauncherProfile.TARGET_EXE;
 
                 args += "/dir " + StringUtils.escapeDOSPath(exeDir) + " \"" + filename + "\"" + execArgs;
             }
