@@ -23,7 +23,10 @@ public class D2ModUdpAdapterTest {
         b.put((byte)1).put((byte)1); // raw count, monster count
         b.putInt(0x10203040).putShort((short)340).putShort((short)260);
         b.put((byte)75).put((byte)2).put((byte)4).put(new byte[]{'O','r','c','1'});
-        b.put((byte)0).put((byte)0); // item and object lists
+        b.put((byte)1); // item list
+        b.putInt(0x00000100).putShort((short)320).putShort((short)260).put((byte)4).put((byte)0);
+        b.put((byte)1); // object list
+        b.putInt(0x00000200).putShort((short)360).putShort((short)260).put((byte)267).put((byte)0);
         b.put((byte)0).putShort((short)0xFFFF).putShort((short)0xFFFF); // class, left/right skill
         for (int i=0;i<16;i++) b.putShort((short)(i<8 ? 0x0100+i : 0xFFFF)).put((byte)(i%2));
         return Arrays.copyOf(b.array(), b.position());
@@ -42,6 +45,10 @@ public class D2ModUdpAdapterTest {
         assertEquals(1, state.monsters.size());
         assertEquals(0x10203040L, state.monsters.get(0).id);
         assertEquals("Orc1", state.monsters.get(0).name);
+        assertEquals(1, state.items.size());
+        assertEquals(0x100L, state.items.get(0).id);
+        assertEquals(1, state.objects.size());
+        assertEquals(267, state.objects.get(0).kind);
         assertEquals(0x0103, state.hotkeySkills[3]);
         assertTrue(state.hotkeyLeft[3]);
         assertEquals(-1, state.hotkeySkills[9]);
