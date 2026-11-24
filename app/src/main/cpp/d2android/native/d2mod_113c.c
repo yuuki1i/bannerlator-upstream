@@ -131,11 +131,12 @@ static struct {
     DWORD expires, lastPress;
 } g_walk;
 
-static struct {
+typedef struct {
     int active;
     int button, type;
     DWORD id, expires, lastPress;
-} g_attack;
+} HeldAction;
+static HeldAction g_held[2];
 
 static char g_game_hash[65];
 static char g_common_hash[65];
@@ -306,11 +307,11 @@ static void click_unit(DWORD click_type, int button, DWORD type, DWORD id) {
     (void)button;
 }
 
-static void release_attack(void) {
-    if (!g_attack.active) return;
-    click_unit(g_attack.button == BUTTON_RIGHT ? 5u : 2u, g_attack.button,
-               g_attack.type, g_attack.id);
-    memset(&g_attack, 0, sizeof(g_attack));
+static void release_held(int button) {
+    HeldAction* held = &g_held[button];
+    if (!held->active) return;
+    click_unit(button == BUTTON_RIGHT ? 5u : 2u, button, held->type, held->id);
+    memset(held, 0, sizeof(*held));
 }
 
 static void process_unit_command(const BYTE* p, unsigned length) {
@@ -319,15 +320,15 @@ static void process_unit_command(const BYTE* p, unsigned length) {
     DWORD type = *(const DWORD*)(p + 12);
     DWORD id = *(const DWORD*)(p + 16);
     if (button != BUTTON_LEFT && button != BUTTON_RIGHT) return;
+    HeldAction* held = &g_held[button];
     if (phase == PHASE_UP) {
-        if (g_attack.active && g_attack.id == id && g_attack.type == type) release_attack();
+        if (held->active && held->id == id && held->type == type) release_held(button);
         return;
     }
     if (phase == PHASE_DOWN || phase == PHASE_HOLD) {
-        if (g_attack.active && (g_attack.id != id || g_attack.type != type || g_attack.button != button))
-            release_attack();
-        g_attack.active = 1; g_attack.button = button; g_attack.type = type; g_attack.id = id;
-        g_attack.expires = now_ms() + 650;
+        if (held->active && (held->id != id || held->type != type)) release_held(button);
+        held->active = 1; held->button = button; held->type = type; held->id = id;
+        held->expires = now_ms() + 650;
         return;
     }
     if (phase == PHASE_CLICK) {
@@ -514,13 +515,15 @@ static void game_tick(void) {
         g_walk.stopping=0;
     }
 
-    if (g_attack.active) {
-        if ((LONG)(now-g_attack.expires)>=0) release_attack();
-        else if (now-g_attack.lastPress>=90) {
-            click_unit(g_attack.button==BUTTON_RIGHT?3u:0u,g_attack.button,g_attack.type,g_attack.id);
-            g_attack.lastPress=now;
+    for (int button=BUTTON_LEFT;button<=BUTTON_RIGHT;button++) {
+        HeldAction* held = &g_held[button];
+        if (!held->active) continue;
+        if ((LONG)(now-held->expires)>=0) release_held(button);
+        else if (now-held->lastPress>=90) {
+            click_unit(button==BUTTON_RIGHT?3u:0u,button,held->type,held->id);
+            held->lastPress=now;
         } else {
-            click_unit(g_attack.button==BUTTON_RIGHT?4u:1u,g_attack.button,g_attack.type,g_attack.id);
+            click_unit(button==BUTTON_RIGHT?4u:1u,button,held->type,held->id);
         }
     }
 
