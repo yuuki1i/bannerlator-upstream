@@ -203,6 +203,7 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
     @Override public void attack(boolean pressed) {
         if (pressed) {
             if (walking) stopWalking();
+            stopLeftSkillForMovement();
             attackHeld = true;
             sendAttack(D2CommandPacket.PHASE_DOWN);
             synchronized (lock) {
@@ -284,7 +285,10 @@ public final class D2ModUdpAdapter implements D2CommandBridge.GameAdapter, AutoC
         int button = binding == null ? D2CommandPacket.BUTTON_RIGHT
                 : (binding.left ? D2CommandPacket.BUTTON_LEFT : D2CommandPacket.BUTTON_RIGHT);
         if (pressed) {
-            if (walking && binding != null && binding.left) stopWalking();
+            if (binding != null && binding.left) {
+                if (walking) stopWalking();
+                if (attackHeld) stopAttackForMovement();
+            }
             activeSkillSlot = slot;
             if (binding != null) send(D2CommandPacket.selectSkill(binding.left, binding.id));
             else send(D2CommandPacket.keyPress(0x70 + slot));
