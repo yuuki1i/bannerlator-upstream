@@ -104,7 +104,7 @@ public final class D2TouchOverlayView extends View {
             paint.setColor(0xFFFFFFFF);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f);
-            canvas.drawRect(bounds(editingElement), paint);
+            canvas.drawRect(bounds(selectedForEdit), paint);
             paint.setStyle(Paint.Style.FILL);
         }
     }
