@@ -37,6 +37,8 @@ public class D2CommandPacketTest {
                 D2CommandPacket.keyPress(0x49));
         assertArrayEquals(new byte[] {'D','2','A','C',1,37,0,0,1,0,100,0,(byte)0x9c,(byte)0xff},
                 D2CommandPacket.groundSkill(1,0,100,-100));
+        assertArrayEquals(new byte[] {'D','2','A','C',1,38,0,0,0,0,80,0,120,0},
+                D2CommandPacket.tap(0,0,80,120));
     }
 
     @Test(expected = IllegalArgumentException.class)
