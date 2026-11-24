@@ -20,6 +20,9 @@ public final class D2CommandBridge {
         /** Optional target cycling: direction is -1 or +1. */
         default void cycleTarget(int direction) {}
         default void openPanel(int panel) {}
+        default void autoPickup() {}
+        default void talk() {}
+        default void sortInventory() {}
     }
 
     private final GameAdapter adapter;
@@ -75,6 +78,24 @@ public final class D2CommandBridge {
     public boolean openPanel(int panel) {
         if (!isAvailable() || panel < 0 || panel > 4) return false;
         adapter.openPanel(panel);
+        return true;
+    }
+
+    public boolean autoPickup() {
+        if (!isAvailable()) return false;
+        adapter.autoPickup();
+        return true;
+    }
+
+    public boolean talk() {
+        if (!isAvailable()) return false;
+        adapter.talk();
+        return true;
+    }
+
+    public boolean sortInventory() {
+        if (!isAvailable()) return false;
+        adapter.sortInventory();
         return true;
     }
 
